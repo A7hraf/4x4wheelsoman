@@ -19,10 +19,11 @@
     roof: (c) => `<path d="M30 130 L50 70 H150 L170 130Z" fill="none" stroke="#dee2e6" stroke-width="8" stroke-linejoin="round"/>${[0, 1, 2, 3, 4].map(i => `<line x1="${48 + i * 26}" y1="74" x2="${42 + i * 29}" y2="128" stroke="${c}" stroke-width="6"/>`).join('')}<rect x="44" y="130" width="12" height="20" fill="#adb5bd"/><rect x="144" y="130" width="12" height="20" fill="#adb5bd"/>`,
     accessories: (c) => `<rect x="40" y="58" width="120" height="96" rx="12" fill="#dee2e6"/><rect x="40" y="58" width="120" height="26" rx="12" fill="${c}"/><rect x="84" y="44" width="32" height="16" rx="6" fill="none" stroke="#adb5bd" stroke-width="6"/><rect x="58" y="100" width="84" height="8" rx="4" fill="#adb5bd"/><rect x="58" y="118" width="60" height="8" rx="4" fill="#ced4da"/>`
   };
+  const ALIAS = { 'wheels-tires': 'wheels', power: 'lighting', performance: 'suspension', drivetrain: 'bumpers', 'side-steps': 'roof', tops: 'roof' };
   function productArt(p, opts) {
     opts = opts || {};
     if (p && p.image) return `<img src="${p.image}" alt="" loading="lazy" style="width:100%;height:100%;object-fit:${opts.fit || 'cover'};display:block">`;
-    const cat = (p && p.category) || 'accessories';
+    const cat = ALIAS[(p && p.category)] || (p && p.category) || 'accessories';
     const [bg, accent] = PAL[cat] || PAL.accessories;
     const id = 'g' + Math.random().toString(36).slice(2, 7);
     return `<svg viewBox="0 0 200 200" preserveAspectRatio="xMidYMid slice" style="width:100%;height:100%;display:block" role="img" aria-label="${(p && p.name || '').replace(/"/g, '')}">

@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Invoice | 4x4 Wheels Oman</title>
+  <meta name="robots" content="noindex">
+  <link rel="icon" href="assets/img/site/logo.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Chakra+Petch:wght@600;700&display=swap" rel="stylesheet">
+  <style>
+    :root { --red: #e3140c; --ink: #15171a; --mute: #6b6e76; --line: #e6e7ea; color-scheme: light; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #0b0b0d; font-family: Barlow, system-ui, -apple-system, 'Segoe UI', sans-serif; color: var(--ink); padding: 24px 16px 60px; }
+    .sheet { max-width: 760px; margin: 0 auto; background: #fff; border-radius: 16px; overflow: hidden; box-shadow: 0 30px 60px -20px rgba(0,0,0,.6); }
+    .top { background: #050505 url('assets/img/site/wall.webp') center / cover; color: #fff; padding: 26px 28px; display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; }
+    .top img { height: 64px; }
+    .top h1 { font-family: 'Chakra Petch', sans-serif; margin: 0; font-size: 30px; letter-spacing: .04em; }
+    .top .no { color: #c9cacf; font-size: 14px; text-align: end; }
+    .body { padding: 26px 28px; }
+    .meta { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-bottom: 22px; font-size: 14.5px; }
+    .meta small { display: block; color: var(--mute); font-size: 12px; text-transform: uppercase; letter-spacing: .06em; margin-bottom: 4px; }
+    table { width: 100%; border-collapse: collapse; font-size: 14.5px; }
+    th { text-align: start; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--mute); border-bottom: 2px solid var(--ink); padding: 8px 6px; }
+    td { padding: 11px 6px; border-bottom: 1px solid var(--line); vertical-align: top; }
+    td small { color: var(--mute); display: block; }
+    .r { text-align: end; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .tot { margin-inline-start: auto; width: min(320px, 100%); margin-top: 16px; font-size: 15px; }
+    .tot div { display: flex; justify-content: space-between; padding: 6px 0; }
+    .tot .g { border-top: 2px solid var(--ink); margin-top: 6px; padding-top: 10px; font-weight: 700; font-size: 20px; font-family: 'Chakra Petch', sans-serif; }
+    .badge { display: inline-block; padding: 3px 10px; border-radius: 99px; font-size: 12.5px; font-weight: 700; }
+    .paid { background: #e7f6ef; color: #12805c; } .due { background: #fff4e5; color: #b54708; }
+    .qp { margin-top: 20px; border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; display: flex; justify-content: space-between; gap: 12px; align-items: center; flex-wrap: wrap; }
+    .foot { border-top: 1px solid var(--line); padding: 18px 28px; display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; font-size: 13px; color: var(--mute); }
+    .bar { max-width: 760px; margin: 16px auto 0; display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+    .btn { display: inline-flex; gap: 8px; align-items: center; height: 46px; padding: 0 22px; border-radius: 999px; border: 1px solid rgba(255,255,255,.25); color: #fff; background: transparent; font: inherit; font-weight: 600; cursor: pointer; text-decoration: none; }
+    .btn.red { background: var(--red); border-color: var(--red); }
+    .err { color: #fff; text-align: center; padding: 80px 20px; }
+    @media (max-width: 520px) { .meta { grid-template-columns: 1fr; } .body, .top, .foot { padding-left: 16px; padding-right: 16px; } .hide-sm { display: none; } }
+    @media print { body { background: #fff; padding: 0; } .sheet { box-shadow: none; border-radius: 0; } .bar { display: none; } .top { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script>
+  (function () {
+    var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
+    var fmt = function (n) { return (Number(n) || 0).toLocaleString('en-US', { minimumFractionDigits: 3, maximumFractionDigits: 3 }); };
+    var PAY = { cash: 'Cash', card: 'Card', transfer: 'Bank transfer', cod: 'Cash on delivery', qpay: 'Qpay installments' };
+    var d;
+    try {
+      var h = location.hash.slice(1).replace(/-/g, '+').replace(/_/g, '/');
+      while (h.length % 4) h += '=';
+      d = JSON.parse(decodeURIComponent(escape(atob(h))));
+    } catch (e) { d = null; }
+    var root = document.getElementById('root');
+    if (!d || !d.n) { root.innerHTML = '<div class="err"><h2>Invoice not found</h2><p>Please open the full link you received on WhatsApp.</p></div>'; return; }
+    document.title = 'Invoice ' + d.n + ' | ' + (d.b && d.b.n || '4x4 Wheels Oman');
+    var cu = d.cu || 'OMR', date = new Date(d.d);
+    var rows = (d.it || []).map(function (i) { return '<tr><td>' + esc(i[0]) + (i[1] ? '<small>' + esc(i[1]) + '</small>' : '') + '</td><td class="r">' + i[2] + '</td><td class="r hide-sm">' + fmt(i[3]) + '</td><td class="r">' + fmt(i[2] * i[3]) + '</td></tr>'; }).join('');
+    root.innerHTML =
+      '<div class="sheet"><div class="top"><img src="assets/img/site/logo-mark.png" alt=""><div><h1>INVOICE</h1><div class="no">' + esc(d.n) + '<br>' + date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) + '</div></div></div>' +
+      '<div class="body"><div class="meta"><div><small>Billed to</small><b>' + esc(d.c) + '</b><br>' + esc(d.p || '') + '</div><div><small>From</small><b>' + esc(d.b.n) + '</b><br>' + esc(d.b.a) + '<br>' + esc(d.b.ph) + (d.b.cr ? '<br>CR ' + esc(d.b.cr) : '') + '</div></div>' +
+      '<table><thead><tr><th>Item</th><th class="r">Qty</th><th class="r hide-sm">Price</th><th class="r">Amount</th></tr></thead><tbody>' + rows + '</tbody></table>' +
+      '<div class="tot"><div><span>Subtotal</span><span>' + fmt(d.s) + '</span></div>' + (d.ds ? '<div><span>Discount</span><span>−' + fmt(d.ds) + '</span></div>' : '') + '<div><span>VAT ' + (d.vr || 5) + '%</span><span>' + fmt(d.v) + '</span></div>' + (d.sh ? '<div><span>Delivery</span><span>' + fmt(d.sh) + '</span></div>' : '') + '<div class="g"><span>Total ' + esc(cu) + '</span><span>' + fmt(d.t) + '</span></div>' +
+      '<div><span>Payment</span><span>' + esc(PAY[d.pm] || d.pm) + ' <span class="badge ' + (d.pd ? 'paid">PAID' : 'due">DUE') + '</span></span></div></div>' +
+      (d.pm === 'qpay' ? '<div class="qp"><div><b>Pay in 4 with Qpay</b><br><span style="color:#6b6e76;font-size:14px">4 interest-free payments of ' + esc(cu) + ' ' + fmt(d.t / 4) + '</span></div>' + (d.q ? '<a class="btn red" style="height:40px" href="' + esc(d.q) + '" target="_blank" rel="noopener">Open Qpay</a>' : '') + '</div>' : '') +
+      '</div><div class="foot"><span>Thank you for choosing ' + esc(d.b.n) + '!</span><span>Al Maabela · Sat–Thu 5 PM–12 AM</span></div></div>' +
+      '<div class="bar"><button class="btn red" onclick="window.print()">Print / Save PDF</button>' + (d.b.w ? '<a class="btn" href="https://api.whatsapp.com/send?phone=' + encodeURIComponent(d.b.w) + '&text=' + encodeURIComponent('Hi, about invoice ' + d.n) + '">WhatsApp us</a>' : '') + '<a class="btn" href="./">Visit our shop</a></div>';
+  })();
+  </script>
+</body>
+</html>

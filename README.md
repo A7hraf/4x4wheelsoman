@@ -1,77 +1,37 @@
-# Business Hub: shop, online store, inventory and finance
+# 4x4 Wheels Oman: online store and business dashboard
 
-A complete management system for an off-road / 4x4 parts business in Oman. It's a plain HTML/CSS/JS site with no build step, so it runs directly on **GitHub Pages**.
+A static website (no server needed) hosted on **GitHub Pages**.
 
-| Page | What it does |
-|---|---|
-| `admin.html` (admin dashboard) | Dashboard, Point of Sale, Online Orders, Inventory, Purchasing, **AI Advisor**, Finance, Reports, Customers, Settings |
-| `index.html` (online store) | Home with offers, shop with categories and filters, product pages, cart, checkout, **order via WhatsApp**, Arabic / English |
+| Page | Address | For |
+|---|---|---|
+| Online store | `https://a7hraf.github.io/4x4wheelsoman/` | Customers |
+| Admin dashboard | `https://a7hraf.github.io/4x4wheelsoman/admin.html` | Owner only (don't share) |
+| Online invoice | `…/bill.html#…` | Opened by customers from the WhatsApp bill link |
 
-## Features
+## Online store
+- Same design and structure as 4x4wheelsoman.com: dark theme, red accent, Chakra Petch / Barlow fonts, Arabic and English.
+- Real catalog: 58 parts, 9 categories, 19 vehicles and 20 brands, with photos, part numbers, specs and fitment.
+- Pages: home (vehicle finder, categories, brands, popular upgrades, Qpay, fitment help), shop with filters, categories, vehicles, product pages (zoom, fit checker, specs), Pay in installments (Qpay calculator and FAQ), Visit us, and the quote list.
+- The quote list is sent to WhatsApp with the customer's vehicle and an optional Qpay request.
 
-**Online store (customers)**
-- Modern, responsive design for phones and desktops, in Arabic (RTL) and English
-- Home page with hero, vehicle finder, categories, hot offers, featured products, brands and a WhatsApp banner
-- Shop page with category, vehicle, brand, in-stock and on-sale filters, plus search and sort
-- Product page with photo, price and "was" price, stock status, fitment, description and related items
-- Cart drawer where customers change quantities, see VAT and delivery, and get a free-delivery progress bar
-- Checkout on the website (cash on delivery, card on delivery or bank transfer), or **send the order on WhatsApp** with the full cart pre-filled
-- Every order, including WhatsApp orders, appears in the admin as a **New** online order
+## Admin dashboard
+- **Dashboard, Point of Sale, Orders, Inventory, Purchasing, Finance, Reports, Customers, AI Advisor.**
+- **Quotes**: paste the customer's WhatsApp message (sent from the website) to build a quote automatically, price it, send it back on WhatsApp, then convert it to an order.
+- **WhatsApp**
+  - Send a bill: a professional online invoice link sent to the customer on WhatsApp.
+  - Notify the customer when an order is confirmed, ready, shipped or delivered, or send a payment reminder.
+  - Advertising campaigns: target customers by vehicle, governorate, purchased category, workshops, or no purchase in 60+ days. Product links are added to the message, and a "Send next" runner sends one message at a time.
+  - Editable message templates and a message log.
+- **Qpay**: a pipeline for installment orders (To request → Requested → Approved → Settled / Declined), a 4-payment schedule, a limit check (OMR 500), merchant-fee tracking, and the request message sent on WhatsApp.
+- **Publish to website**: push product, price and setting changes to the live store with one click, using a GitHub token. You can also download `catalog.js` and upload it to `assets/js/` yourself.
 
-**Admin dashboard (owner)**
-- Products: add, edit, delete, upload photos, set offers ("was" price), choose featured items, show or hide in the store
-- Orders: a pipeline (New → Processing → Shipped → Delivered / Cancelled), order details, customer data and printable invoices
-- Point of Sale for the physical shop: product grid, cart, discount, 5% VAT, cash/card/transfer and a printable receipt
-- Inventory: stock levels, low-stock alerts, stock adjustments, a stock movement log and CSV export
-- Purchasing: suppliers, purchase orders, reorder suggestions, and receiving stock (which updates stock and costs)
-- Finance: P&L, cash flow, VAT summary, expenses, payment mix and income vs expenses for the last 6 months
-- Reports: best sellers, sales by brand, governorate, weekday and source, with CSV export
-- **AI Advisor**
-  - A business health score and smart insights that work offline: sales trend, profit, stock-outs, slow movers, late orders and the best trading day
-  - A chat with Claude about your own numbers ("What should I reorder?", "Where am I losing money?")
-  - **Report generation**: a printable / PDF / downloadable business report, with an optional AI-written executive summary and recommendations
-- Arabic / English, light / dark mode, global search, backup / restore
+## First-time setup
+1. Open **Admin → Settings**. Check the business details and WhatsApp number. Click **Start fresh** to remove the demo orders and demo prices.
+2. Open **Inventory**. Set your real prices and stock. Tick **Show price on website** only for items with a fixed price; all others show "Price on request".
+3. In **Settings → Publish to website**, paste a GitHub fine-grained token with *Contents: Read and write* on this repository only, then click **Publish now**.
 
-## Publish on GitHub Pages
-
-1. Push this folder to a GitHub repository.
-2. In the repository, go to **Settings → Pages → Build and deployment**, choose **Deploy from a branch**, then select `main` and `/ (root)`.
-3. After about a minute the site is live at `https://<user>.github.io/<repo>/`:
-   - Store (send this to customers): `https://<user>.github.io/<repo>/`
-   - Admin (keep private): `https://<user>.github.io/<repo>/admin.html`
-
-## Connect the AI (optional)
-
-1. Create an API key at https://console.anthropic.com.
-2. In the admin, go to **Settings → AI (Claude) connection**, paste the key and click Save.
-
-The key is stored **only in that browser** and is sent only to Anthropic. It is never written into the site's code or into backups. Use it only on your own device.
-
-## Important: where data is stored
-
-This version has no server. All data (products, orders, customers, expenses) is saved in the **browser's local storage** on the device where it's used.
-
-- The store and the admin share data only when they're opened **in the same browser on the same device**. That's ideal for a demo or for single-computer use.
-- Use **Settings → Download backup** regularly. You can restore it on another computer.
-- For real customers ordering from their own phones while the owner manages everything from another device, the next step is to connect a free hosted database (for example Supabase or Firebase). The data layer is isolated in `assets/js/db.js` so it can be swapped without touching the screens.
-
-## Customize
-
-- Business name, phone, WhatsApp number, address, VAT, delivery fee and the free-delivery threshold are in **Settings**.
-- Demo data is loaded the first time. Use **Settings → Reset demo data** to restore it, or delete and replace products with your own.
-
-## Files
-
-```
-index.html            online store (main page)
-admin.html            admin dashboard
-assets/css/app.css    admin styles
-assets/css/store.css  store styles
-assets/js/db.js       data layer + demo data
-assets/js/app.js      admin screens
-assets/js/store.js    store screens
-assets/js/ai.js       insights engine, Claude integration, report builder
-assets/js/art.js      product illustrations and photo resizing
-assets/js/i18n.js     Arabic / English texts
-assets/js/icons.js    icon set
-```
+## Notes
+- Admin data (orders, customers, expenses) is stored in the browser you use for the admin. Download a backup regularly (Settings → Download backup).
+- WhatsApp messages open in WhatsApp or WhatsApp Business with the text ready, and you press Send. Fully automatic sending would need the Meta WhatsApp Business Cloud API and a server.
+- Qpay (Oman) doesn't publish a public merchant API. Requests are created in the Qpay merchant app/portal, and the dashboard tracks each request and messages the customer.
+- Only send marketing messages to customers who agreed to receive them (the "opt-in" flag on each customer).

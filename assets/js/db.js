@@ -1,12 +1,12 @@
 /* ============================================================
-   Business Hub – data layer (localStorage)
-   Shared by the dashboard (admin.html) and storefront (index.html)
+   4x4 Wheels Oman – admin data layer (localStorage)
+   Seeded from the real catalog (assets/js/catalog.js) + demo transactions.
    ============================================================ */
 (function (global) {
-  const KEY = 'bh_db_v1';
+  const KEY = 'x4w_db_v2';
   const DAY = 86400000;
+  const CAT = global.CATALOG || { products: [], categories: [], vehicles: [], makes: [], brands: [] };
 
-  // ---------- deterministic random for seed data ----------
   function rng(seed) {
     return function () {
       seed |= 0; seed = (seed + 0x6d2b79f5) | 0;
@@ -17,209 +17,154 @@
   }
   const uid = (p) => p + '_' + Math.random().toString(36).slice(2, 9) + Date.now().toString(36).slice(-3);
   const r3 = (n) => Math.round(n * 1000) / 1000;
-
-  // ---------- seed catalogue ----------
-  const CATEGORIES = [
-    { id: 'wheels', en: 'Wheels & Rims', ar: 'الجنوط' },
-    { id: 'tyres', en: 'Tyres', ar: 'الإطارات' },
-    { id: 'suspension', en: 'Suspension', ar: 'نظام التعليق' },
-    { id: 'bumpers', en: 'Bumpers & Protection', ar: 'الصدامات والحماية' },
-    { id: 'lighting', en: 'Lighting', ar: 'الإضاءة' },
-    { id: 'recovery', en: 'Recovery Gear', ar: 'معدات السحب' },
-    { id: 'roof', en: 'Roof Racks & Storage', ar: 'حوامل السقف' },
-    { id: 'accessories', en: 'Accessories', ar: 'إكسسوارات' }
-  ];
-
-  const SEED_PRODUCTS = [
-    ['WHL-FL-D538', 'Fuel Rebel D681 17x9 Matte Black', 'Fuel Off-Road', 'wheels', 62, 95, 48, 16, 'A1-01', 'Land Cruiser / Hilux'],
-    ['WHL-MR-305', 'Method MR305 NV 17x8.5 Bronze', 'Method Race Wheels', 'wheels', 70, 110, 32, 16, 'A1-02', 'Land Cruiser 200/300'],
-    ['WHL-KM-544', 'KMC KM544 Mesa 18x9 Satin Black', 'KMC', 'wheels', 58, 88, 12, 16, 'A1-03', 'Nissan Patrol Y62'],
-    ['WHL-BR-BD', 'Black Rhino Arsenal 17x8.5 Sand', 'Black Rhino', 'wheels', 64, 99, 20, 8, 'A1-04', 'Toyota FJ / Prado'],
-    ['TYR-BFG-KO2', 'BFGoodrich All-Terrain T/A KO2 285/70R17', 'BFGoodrich', 'tyres', 72, 108, 64, 24, 'B2-01', 'Universal'],
-    ['TYR-BFG-KM3', 'BFGoodrich Mud-Terrain KM3 35x12.5R17', 'BFGoodrich', 'tyres', 95, 142, 18, 16, 'B2-02', 'Universal'],
-    ['TYR-TOY-OPAT', 'Toyo Open Country A/T III 265/65R17', 'Toyo', 'tyres', 55, 84, 40, 20, 'B2-03', 'Universal'],
-    ['TYR-MAX-RAZ', 'Maxxis Razr AT811 275/70R18', 'Maxxis', 'tyres', 58, 89, 9, 16, 'B2-04', 'Universal'],
-    ['SUS-OME-LC200', 'Old Man Emu 2" Lift Kit – Land Cruiser 200', 'ARB Old Man Emu', 'suspension', 420, 640, 6, 3, 'C3-01', 'Land Cruiser 200'],
-    ['SUS-ICON-S2', 'ICON Stage 2 Suspension – Hilux', 'ICON Vehicle Dynamics', 'suspension', 680, 990, 4, 2, 'C3-02', 'Hilux 2016+'],
-    ['SUS-KNG-25', 'King 2.5 Coilovers (pair) – Patrol Y62', 'King Shocks', 'suspension', 890, 1290, 2, 2, 'C3-03', 'Nissan Patrol Y62'],
-    ['SUS-BIL-5100', 'Bilstein 5100 Shock Absorber', 'Bilstein', 'suspension', 38, 62, 26, 10, 'C3-04', 'Universal'],
-    ['BMP-ARB-SB', 'ARB Summit Front Bumper – Land Cruiser 300', 'ARB', 'bumpers', 610, 895, 3, 2, 'D4-01', 'Land Cruiser 300'],
-    ['BMP-TJM-T13', 'TJM T13 Bull Bar – Hilux', 'TJM', 'bumpers', 450, 680, 1, 2, 'D4-02', 'Hilux 2021+'],
-    ['BMP-RCK-SLD', 'Aluminium Rock Sliders (pair)', 'Rival 4x4', 'bumpers', 180, 275, 7, 3, 'D4-03', 'Land Cruiser 200'],
-    ['BMP-SKID', 'Steel Under-Body Skid Plate Set', 'Rival 4x4', 'bumpers', 140, 215, 10, 4, 'D4-04', 'Hilux / Fortuner'],
-    ['LGT-RIG-50', 'Rigid Industries 50" RDS Light Bar', 'Rigid Industries', 'lighting', 290, 445, 8, 4, 'E5-01', 'Universal'],
-    ['LGT-BAJA-S2', 'Baja Designs Squadron Pro LED (pair)', 'Baja Designs', 'lighting', 120, 185, 15, 6, 'E5-02', 'Universal'],
-    ['LGT-ROCK-8', 'RGB Rock Light Kit (8 pods)', 'Lazer', 'lighting', 35, 58, 30, 10, 'E5-03', 'Universal'],
-    ['LGT-KC-30', 'KC HiLiTES 30" Pro6 Gravity Bar', 'KC HiLiTES', 'lighting', 210, 320, 5, 3, 'E5-04', 'Universal'],
-    ['REC-WRN-ZEUS', 'Warn Zeus 10-S Winch 10,000 lb', 'Warn', 'recovery', 520, 780, 5, 2, 'F6-01', 'Universal'],
-    ['REC-MAX-MKII', 'MAXTRAX MKII Recovery Boards (pair)', 'MAXTRAX', 'recovery', 72, 115, 22, 8, 'F6-02', 'Universal'],
-    ['REC-ARB-CKMTA', 'ARB Twin Portable Air Compressor', 'ARB', 'recovery', 210, 320, 9, 4, 'F6-03', 'Universal'],
-    ['REC-KIT-PRM', 'Premium Recovery Kit (straps, shackles, bag)', 'ARB', 'recovery', 48, 79, 18, 6, 'F6-04', 'Universal'],
-    ['REC-DEF-TYR', 'Tyre Deflator Set (4 pcs)', 'Staun', 'recovery', 22, 38, 3, 10, 'F6-05', 'Universal'],
-    ['ROF-RHN-PIO', 'Rhino-Rack Pioneer Platform 1528x1376', 'Rhino-Rack', 'roof', 380, 575, 6, 3, 'G7-01', 'Land Cruiser / Patrol'],
-    ['ROF-FRT-SLM', 'Front Runner Slimline II Roof Rack', 'Front Runner', 'roof', 340, 520, 4, 2, 'G7-02', 'Hilux / Prado'],
-    ['ROF-TENT-RTT', 'Roof Top Tent – 2 Person Hard Shell', 'iKamper', 'roof', 980, 1450, 2, 1, 'G7-03', 'Universal'],
-    ['ROF-JRY-CAN', 'Jerry Can Holder + 20L Can', 'Front Runner', 'roof', 28, 45, 25, 8, 'G7-04', 'Universal'],
-    ['ACC-SNK-LC', 'Safari Snorkel – Land Cruiser 70', 'Safari', 'accessories', 95, 148, 7, 3, 'H8-01', 'Land Cruiser 70'],
-    ['ACC-FRG-60', 'Dometic CFX3 45L Fridge/Freezer', 'Dometic', 'accessories', 260, 395, 6, 3, 'H8-02', 'Universal'],
-    ['ACC-GPS-CB', 'UHF CB Radio Kit with Antenna', 'GME', 'accessories', 85, 132, 11, 4, 'H8-03', 'Universal'],
-    ['ACC-FLR-MAT', '3D Floor Mats Set', 'WeatherTech', 'accessories', 24, 42, 35, 10, 'H8-04', 'Land Cruiser 300'],
-    ['ACC-AWN-270', '270° Side Awning', 'Rhino-Rack', 'accessories', 290, 440, 0, 2, 'H8-05', 'Universal']
-  ];
-
-  const SEED_CUSTOMERS = [
-    ['Ahmed Al Balushi', '+968 9123 4567', 'Muscat', 'retail'],
-    ['Salim Al Harthy', '+968 9234 5678', 'Nizwa', 'retail'],
-    ['Khalid Al Rawahi', '+968 9345 6789', 'Sohar', 'retail'],
-    ['Desert Tracks Workshop', '+968 2456 7890', 'Muscat', 'workshop'],
-    ['Mohammed Al Lawati', '+968 9567 8901', 'Muscat', 'retail'],
-    ['Faisal Al Siyabi', '+968 9678 9012', 'Sur', 'retail'],
-    ['Al Wusta Off-Road Club', '+968 9789 0123', 'Duqm', 'workshop'],
-    ['Yousuf Al Amri', '+968 9890 1234', 'Salalah', 'retail'],
-    ['Hamad Al Kindi', '+968 9901 2345', 'Ibri', 'retail'],
-    ['Nasser Al Maskari', '+968 9012 3456', 'Ibra', 'retail'],
-    ['Sultan Al Busaidi', '+968 9111 2233', 'Muscat', 'retail'],
-    ['Overland Oman LLC', '+968 2444 5566', 'Barka', 'workshop'],
-    ['Saeed Al Hinai', '+968 9222 3344', 'Rustaq', 'retail'],
-    ['Ali Al Jabri', '+968 9333 4455', 'Sohar', 'retail']
-  ];
-
-  const SEED_SUPPLIERS = [
-    ['ARB Middle East', 'UAE', '+971 4 555 1200'],
-    ['Gulf Tyre Trading', 'UAE', '+971 6 532 8800'],
-    ['Wheel Pros International', 'USA', '+1 303 555 0144'],
-    ['Overland Gear Distribution', 'Oman', '+968 2450 1188']
-  ];
-
   const GOVERNORATES = ['Muscat', 'Batinah North', 'Batinah South', 'Dakhiliyah', 'Sharqiyah North', 'Sharqiyah South', 'Dhahirah', 'Buraimi', 'Al Wusta', 'Dhofar', 'Musandam'];
 
-  const OFFERS = { 'TYR-BFG-KO2': 125, 'LGT-RIG-50': 520, 'REC-MAX-MKII': 135, 'ACC-FRG-60': 449, 'WHL-FL-D538': 110, 'REC-WRN-ZEUS': 860 };
-  const FEATURED = ['WHL-MR-305', 'SUS-OME-LC200', 'BMP-ARB-SB', 'ROF-RHN-PIO', 'TYR-BFG-KM3', 'LGT-BAJA-S2', 'REC-ARB-CKMTA', 'ROF-TENT-RTT'];
-  const BLURB = {
-    wheels: 'Forged for the trail and built to carry heavy loads. Precision-machined with a durable finish that resists stone chips, sand and UAE/Oman summer heat.',
-    tyres: 'Tough sidewalls, aggressive tread and excellent traction on sand, gravel and wadi rocks — while staying quiet and comfortable on the highway.',
-    suspension: 'Improves ground clearance, load carrying and comfort on corrugated tracks. Tuned for heavy accessories and long desert trips.',
-    bumpers: 'Heavy-duty protection engineered for your vehicle, compatible with winches, lights and airbags. Powder-coated for long life.',
-    lighting: 'High-output LED lighting with excellent beam pattern for night driving in the desert and mountains. Waterproof and dust-proof (IP68).',
-    recovery: 'Essential recovery gear to get you unstuck quickly and safely. Trusted by off-road clubs across Oman.',
-    roof: 'Carry more gear with a strong, low-profile roof system. Aerodynamic design with plenty of mounting options for your adventure.',
-    accessories: 'Practical upgrades for overlanding and daily driving, selected and tested by our team.'
+  // demo selling prices by category (owner replaces with real prices)
+  const DEMO_PRICE = { suspension: [780, 2600], 'wheels-tires': [130, 290], lighting: [160, 620], power: [140, 690], recovery: [12, 95], performance: [190, 1150], drivetrain: [380, 420], 'side-steps': [620, 1150], tops: [880, 1650] };
+
+  const DEFAULT_TEMPLATES = {
+    bill: 'Hello {name}, thank you for shopping with {shop}!\nInvoice {order} — Total {total}\nView / download your bill: {link}',
+    confirmed: 'Hello {name}, your order {order} is confirmed ✅\nTotal: {total}\nWe will message you when it is ready. — {shop}',
+    ready: 'Hello {name}, good news! Your order {order} is ready for pickup at our shop in Al Maabela (Sat–Thu, 5 PM–12 AM). Location: {maps}',
+    shipped: 'Hello {name}, your order {order} is on the way 🚚. Our driver will call you before delivery. — {shop}',
+    delivered: 'Hello {name}, thank you for choosing {shop}! We hope you enjoy your upgrade. A quick Google review helps us a lot: {maps}',
+    reminder: 'Hello {name}, a friendly reminder that {amount} is still due for order {order}. You can pay by transfer, card in the shop, or in installments with Qpay. — {shop}',
+    quote: 'Hello {name}, here is your quote from {shop}:\n\n{items}\n\nTotal: {total}\nPay in full, or in 4 interest-free payments of {quarter} with Qpay. Reply "OK" to confirm.',
+    qpay: 'Hello {name}, we have sent a Qpay payment request of {total} for order {order} to your mobile {phone}.\nOpen the Qpay app to choose your plan (up to 4 interest-free payments of {quarter}). {link}'
   };
-  const describe = (p) => BLURB[p[3]] + ' Fits: ' + p[9] + '.';
 
   function buildSeed() {
     const rand = rng(20261113);
     const pick = (arr) => arr[Math.floor(rand() * arr.length)];
     const now = Date.now();
-
-    const products = SEED_PRODUCTS.map((p, i) => ({
-      id: 'p' + (i + 1), sku: p[0], name: p[1], brand: p[2], category: p[3],
-      cost: p[4], price: p[5], stock: p[6], reorder: p[7], location: p[8], fitment: p[9],
-      active: true, online: true, image: '',
-      oldPrice: OFFERS[p[0]] || 0, featured: FEATURED.includes(p[0]),
-      description: describe(p)
-    }));
-    const customers = SEED_CUSTOMERS.map((c, i) => ({
-      id: 'c' + (i + 1), name: c[0], phone: c[1], city: c[2], type: c[3], created: now - (120 - i * 5) * DAY
-    }));
-    const suppliers = SEED_SUPPLIERS.map((s, i) => ({ id: 's' + (i + 1), name: s[0], country: s[1], phone: s[2] }));
-
+    const products = CAT.products.map((p, i) => {
+      const [lo, hi] = DEMO_PRICE[p.category] || [50, 300];
+      const price = r3(Math.round((lo + rand() * (hi - lo)) / 5) * 5);
+      return Object.assign({}, p, {
+        price, cost: r3(price * (0.62 + rand() * 0.1)), oldPrice: 0, showPrice: false,
+        stock: Math.floor(rand() * (p.category === 'recovery' ? 25 : 8)), reorder: p.category === 'recovery' ? 6 : 2,
+        location: 'R' + (1 + (i % 6)) + '-' + String(1 + Math.floor(i / 6)).padStart(2, '0'), active: true, online: true
+      });
+    });
+    const custSeed = [
+      ['Ahmed Al Balushi', '+968 9123 4567', 'Muscat', 'retail', 'land-cruiser-300'], ['Salim Al Harthy', '+968 9234 5678', 'Dakhiliyah', 'retail', 'patrol-y62'],
+      ['Khalid Al Rawahi', '+968 9345 6789', 'Batinah North', 'retail', 'wrangler-jl'], ['Desert Tracks Garage', '+968 2456 7890', 'Muscat', 'workshop', ''],
+      ['Mohammed Al Lawati', '+968 9567 8901', 'Muscat', 'retail', '4runner'], ['Faisal Al Siyabi', '+968 9678 9012', 'Sharqiyah South', 'retail', 'hilux'],
+      ['Al Wusta Off-Road Club', '+968 9789 0123', 'Al Wusta', 'workshop', ''], ['Yousuf Al Amri', '+968 9890 1234', 'Dhofar', 'retail', 'land-cruiser-200'],
+      ['Hamad Al Kindi', '+968 9901 2345', 'Dhahirah', 'retail', 'bronco'], ['Nasser Al Maskari', '+968 9012 3456', 'Sharqiyah North', 'retail', 'ranger'],
+      ['Sultan Al Busaidi', '+968 9111 2233', 'Muscat', 'retail', 'land-cruiser-300'], ['Overland Oman LLC', '+968 2444 5566', 'Batinah South', 'workshop', ''],
+      ['Saeed Al Hinai', '+968 9222 3344', 'Batinah South', 'retail', 'patrol-y62'], ['Ali Al Jabri', '+968 9333 4455', 'Batinah North', 'retail', 'land-cruiser-70'],
+      ['Majid Al Zadjali', '+968 9444 5566', 'Muscat', 'retail', 'gladiator'], ['Talal Al Ghafri', '+968 9555 6677', 'Dakhiliyah', 'retail', 'f-150']
+    ];
+    const customers = custSeed.map((c, i) => ({ id: 'c' + (i + 1), name: c[0], phone: c[1], city: c[2], type: c[3], vehicle: c[4], optIn: i % 5 !== 3, created: now - (150 - i * 6) * DAY }));
+    const suppliers = [
+      { id: 's1', name: 'ARB Middle East', country: 'UAE', phone: '+971 4 555 1200' }, { id: 's2', name: 'Fox / King Distribution GCC', country: 'UAE', phone: '+971 6 532 8800' },
+      { id: 's3', name: 'Wheel Pros International', country: 'USA', phone: '+1 303 555 0144' }, { id: 's4', name: 'aFe / K&N Gulf', country: 'UAE', phone: '+971 4 321 0099' }
+    ];
     const sales = [];
     const vatRate = 5;
     let shopNo = 1000, webNo = 5000;
+    const hot = products.filter(p => ['recovery', 'wheels-tires', 'lighting', 'power', 'performance'].includes(p.category));
     for (let d = 89; d >= 0; d--) {
-      const dayStart = new Date(now - d * DAY); dayStart.setHours(9, 0, 0, 0);
-      const weekday = dayStart.getDay();
-      const base = weekday === 5 ? 1 : weekday === 4 || weekday === 6 ? 5 : 3; // Fri quiet, Thu/Sat busy
-      const growth = 1 + (89 - d) / 180;
-      const nShop = Math.round((base + rand() * 3) * growth * 0.8);
-      const nWeb = Math.round((1 + rand() * 3) * growth * 0.7);
+      const day = new Date(now - d * DAY); day.setHours(17, 0, 0, 0);
+      if (day.getDay() === 5) continue; // closed Friday
+      const growth = 1 + (89 - d) / 200;
+      const nShop = Math.round((0.6 + rand() * 1.6) * growth);
+      const nWeb = Math.round((0.4 + rand() * 1.3) * growth);
       for (let k = 0; k < nShop + nWeb; k++) {
         const online = k >= nShop;
         const items = [];
-        const nItems = 1 + Math.floor(rand() * (online ? 2 : 3));
+        const nItems = 1 + Math.floor(rand() * 2);
         for (let j = 0; j < nItems; j++) {
-          const pr = rand() < 0.55 ? pick(products.filter(x => ['tyres', 'wheels', 'lighting', 'recovery', 'accessories'].includes(x.category))) : pick(products);
+          const pr = rand() < 0.7 ? pick(hot) : pick(products);
           if (items.find(it => it.pid === pr.id)) continue;
-          const qty = ['tyres', 'wheels'].includes(pr.category) ? pick([1, 2, 4, 4]) : 1;
+          const qty = pr.category === 'wheels-tires' ? pick([4, 4, 5, 2]) : pr.category === 'recovery' ? pick([1, 1, 2]) : 1;
           items.push({ pid: pr.id, name: pr.name, sku: pr.sku, qty, price: pr.price, cost: pr.cost });
         }
         const subtotal = items.reduce((s, it) => s + it.qty * it.price, 0);
-        const discount = rand() < 0.2 ? r3(subtotal * pick([0.05, 0.1])) : 0;
-        const shippingFee = online ? pick([0, 2, 3, 5]) : 0;
+        const discount = rand() < 0.25 ? r3(subtotal * pick([0.03, 0.05, 0.1])) : 0;
+        const shippingFee = online && rand() < 0.4 ? pick([3, 5, 8]) : 0;
         const vat = r3((subtotal - discount) * vatRate / 100);
         const total = r3(subtotal - discount + vat + shippingFee);
-        const date = Math.min(dayStart.getTime() + Math.floor(rand() * 11 * 3600000), now - Math.floor(rand() * 5400000) - 60000);
+        const date = Math.min(day.getTime() + Math.floor(rand() * 6.8 * 3600000), now - Math.floor(rand() * 3600000) - 60000);
         let status = 'completed';
         if (online) {
-          if (d > 6) status = rand() < 0.06 ? 'cancelled' : 'delivered';
+          if (d > 6) status = rand() < 0.05 ? 'cancelled' : 'delivered';
           else if (d > 2) status = pick(['shipped', 'delivered', 'delivered', 'processing']);
           else status = pick(['new', 'new', 'processing', 'shipped']);
         }
-        const cust = rand() < 0.7 || online ? pick(customers) : null;
-        sales.push({
+        const cust = rand() < 0.75 || online ? pick(customers) : null;
+        let payment = online ? pick(['qpay', 'qpay', 'transfer', 'cod', 'card']) : pick(['cash', 'card', 'card', 'qpay']);
+        if (payment === 'qpay' && total > 500) payment = 'transfer';
+        const sale = {
           id: uid('o'), no: online ? 'WEB-' + (webNo++) : 'INV-' + (shopNo++), date, channel: online ? 'online' : 'shop',
-          source: online ? pick(['website', 'website', 'instagram', 'whatsapp']) : 'pos',
-          customerId: cust ? cust.id : null, customerName: cust ? cust.name : 'Walk-in customer',
-          phone: cust ? cust.phone : '', items, subtotal, discount, vat, shippingFee, total,
-          payment: online ? pick(['card', 'cod', 'transfer']) : pick(['cash', 'card', 'card']),
-          status, city: online ? pick(GOVERNORATES) : '', address: online ? 'Way ' + (1000 + Math.floor(rand() * 8000)) + ', House ' + (1 + Math.floor(rand() * 90)) : '',
-          note: ''
-        });
+          source: online ? pick(['whatsapp', 'whatsapp', 'whatsapp', 'website', 'instagram']) : 'pos',
+          customerId: cust ? cust.id : null, customerName: cust ? cust.name : 'Walk-in customer', phone: cust ? cust.phone : '',
+          items, subtotal: r3(subtotal), discount, vat, shippingFee, total, payment, status,
+          city: online ? (cust ? cust.city : pick(GOVERNORATES)) : '', address: '', note: '', paid: true
+        };
+        if (payment === 'qpay') {
+          const st = status === 'cancelled' ? 'declined' : d > 4 ? 'settled' : d > 1 ? 'approved' : 'requested';
+          sale.qpay = { status: st, requestedAt: date, approvedAt: st !== 'requested' ? date + 3600000 : null, settledAt: st === 'settled' ? date + 3 * DAY : null, ref: 'QP' + Math.floor(100000 + rand() * 899999) };
+          sale.paid = st === 'settled' || st === 'approved';
+        }
+        if (online && payment === 'transfer' && d < 3) sale.paid = false;
+        sales.push(sale);
       }
     }
+    sales.sort((a, b) => a.date - b.date);
 
     const expenses = [];
-    const expDefs = [
-      ['rent', 'Showroom & warehouse rent', 1450, 1],
-      ['salaries', 'Staff salaries (6)', 3900, 1],
-      ['utilities', 'Electricity & water', 210, 1],
-      ['utilities', 'Internet & phone lines', 65, 1],
-      ['marketing', 'Instagram & Google ads', 380, 1],
-      ['software', 'Website hosting & payment gateway', 45, 1]
-    ];
+    const expDefs = [['rent', 'Shop & workshop rent – Al Maabela', 950], ['salaries', 'Staff salaries (4)', 2650], ['utilities', 'Electricity & water', 160], ['utilities', 'Internet & phone', 45], ['marketing', 'Instagram ads & content', 320], ['software', 'Website & tools', 35]];
     for (let m = 2; m >= 0; m--) {
       const dt = new Date(now); dt.setDate(1); dt.setMonth(dt.getMonth() - m); dt.setHours(10, 0, 0, 0);
-      expDefs.forEach(e => expenses.push({ id: uid('e'), date: dt.getTime() + (e[0] === 'salaries' ? 26 * DAY : 0), category: e[0], desc: e[1], amount: r3(e[2] * (0.95 + rand() * 0.1)), method: 'transfer' }));
+      expDefs.forEach(e => { const t = dt.getTime() + (e[0] === 'salaries' ? 26 * DAY : 0); if (t < now) expenses.push({ id: uid('e'), date: t, category: e[0], desc: e[1], amount: r3(e[2] * (0.95 + rand() * 0.1)), method: 'transfer' }); });
     }
-    for (let i = 0; i < 26; i++) {
-      expenses.push({
-        id: uid('e'), date: now - Math.floor(rand() * 88) * DAY,
-        category: pick(['shipping', 'shipping', 'maintenance', 'marketing', 'other']),
-        desc: pick(['Courier – Aramex', 'Courier – Oman Post', 'Workshop tools', 'Forklift service', 'Printed brochures', 'Fuel – delivery van', 'Packaging materials']),
-        amount: r3(10 + rand() * 120), method: pick(['cash', 'card', 'transfer'])
-      });
-    }
+    for (let i = 0; i < 22; i++) expenses.push({ id: uid('e'), date: now - Math.floor(rand() * 88) * DAY, category: pick(['shipping', 'shipping', 'maintenance', 'marketing', 'other']), desc: pick(['Courier – Aramex', 'Courier – Oman Post', 'Workshop tools', 'Lift service', 'Fuel – pickup truck', 'Packaging', 'Photo shoot for Instagram']), amount: r3(8 + rand() * 110), method: pick(['cash', 'card', 'transfer']) });
 
+    const P = (slug) => (products.find(p => p.slug === slug) || products[0]);
     const purchases = [
-      { id: uid('po'), no: 'PO-301', date: now - 70 * DAY, supplierId: 's2', status: 'received', items: [{ pid: 'p5', qty: 40, cost: 72 }, { pid: 'p7', qty: 30, cost: 55 }] },
-      { id: uid('po'), no: 'PO-302', date: now - 41 * DAY, supplierId: 's3', status: 'received', items: [{ pid: 'p1', qty: 32, cost: 62 }, { pid: 'p2', qty: 24, cost: 70 }] },
-      { id: uid('po'), no: 'PO-303', date: now - 12 * DAY, supplierId: 's1', status: 'received', items: [{ pid: 'p9', qty: 4, cost: 420 }, { pid: 'p23', qty: 6, cost: 210 }] },
-      { id: uid('po'), no: 'PO-304', date: now - 2 * DAY, supplierId: 's1', status: 'ordered', items: [{ pid: 'p14', qty: 4, cost: 450 }, { pid: 'p34', qty: 6, cost: 290 }] }
+      { id: uid('po'), no: 'PO-301', date: now - 64 * DAY, supplierId: 's1', status: 'received', items: [{ pid: P('ome-bp51-lc300').id, qty: 2 }, { pid: P('ome-bp51-y62').id, qty: 2 }] },
+      { id: uid('po'), no: 'PO-302', date: now - 33 * DAY, supplierId: 's3', status: 'received', items: [{ pid: P('kmc-km544-mesa').id, qty: 12 }] },
+      { id: uid('po'), no: 'PO-303', date: now - 3 * DAY, supplierId: 's4', status: 'ordered', items: [{ pid: P('afe-momentum-gt-y62').id, qty: 3 }, { pid: P('kn-63-9040-lc200').id, qty: 3 }] }
     ];
-    purchases.forEach(p => p.total = r3(p.items.reduce((s, it) => s + it.qty * it.cost, 0)));
-    purchases.filter(p => p.status === 'received').forEach(p => expenses.push({
-      id: uid('e'), date: p.date, category: 'inventory', desc: 'Stock purchase ' + p.no, amount: p.total, method: 'transfer', ref: p.id
-    }));
+    purchases.forEach(po => { po.items.forEach(it => it.cost = P(products.find(x => x.id === it.pid).slug).cost); po.total = r3(po.items.reduce((s, it) => s + it.qty * it.cost, 0)); });
+    purchases.filter(p => p.status === 'received').forEach(p => expenses.push({ id: uid('e'), date: p.date, category: 'inventory', desc: 'Stock purchase ' + p.no, amount: p.total, method: 'transfer', ref: p.id }));
 
-    const moves = [];
+    const quotes = [
+      { no: 'Q-1041', d: 0, c: 'c1', st: 'new', v: 'Toyota Land Cruiser 300 2024', items: [['fox-elite-lc300', 1], ['clearview-power-boards-lc300', 1]], qpay: true },
+      { no: 'Q-1040', d: 1, c: 'c13', st: 'sent', v: 'Nissan Patrol Y62 2021', items: [['ome-bp51-y62', 1], ['afe-momentum-gt-y62', 1]] },
+      { no: 'Q-1039', d: 2, c: 'c3', st: 'accepted', v: 'Jeep Wrangler JL 2022', items: [['bestop-trektop-jl-4door', 1]], qpay: true },
+      { no: 'Q-1038', d: 5, c: 'c9', st: 'lost', v: 'Ford Bronco 2023', items: [['falcon-3-3-bronco', 1]] }
+    ].map(q => ({ id: uid('q'), no: q.no, date: now - q.d * DAY - 3600000 * (2 + q.d), customerId: q.c, vehicle: q.v, status: q.st, qpay: !!q.qpay, note: '', source: 'whatsapp', items: q.items.map(([s, n]) => { const p = P(s); return { pid: p.id, name: p.name, sku: p.partNumber || p.sku, qty: n, price: p.price }; }) }));
+
     return {
-      version: 1, created: now,
-      settings: { name: 'Trailhead 4x4', tagline: 'Off-road parts & accessories', vat: vatRate, currency: 'OMR', phone: '+968 2400 0000', whatsapp: '96890000000', email: 'sales@example.com', address: 'Al Khuwair, Muscat, Oman', cr: '1234567', lang: 'en', theme: 'light', shipping: 2, freeShipOver: 100, heroTitle: 'Built for Oman\u2019s toughest trails', heroText: 'Wheels, tyres, suspension, lighting and recovery gear from the brands off-roaders trust — fitted in Muscat or delivered to every governorate.' },
-      categories: CATEGORIES, products, customers, suppliers, sales, expenses, purchases, moves
+      version: 2, created: now,
+      settings: {
+        name: '4x4 Wheels Oman', tagline: 'Off-road parts, accessories and upgrades', vat: vatRate, currency: 'OMR', phone: '+968 9515 2025', whatsapp: '96895152025', instagram: '4x4wheels.om',
+        email: '', address: 'Al Maabela, Muscat, Oman', addressAr: 'المعبيلة، مسقط، عُمان', maps: 'https://maps.app.goo.gl/DnrLbuokgZqgAH878', cr: '', lang: 'en', theme: 'dark',
+        siteUrl: 'https://a7hraf.github.io/4x4wheelsoman/', showStock: false, rating: '5.0', followers: '20K+', since: 2019,
+        qpay: { enabled: true, limit: 500, installments: 4, feePct: 0, merchantId: '', payLink: 'https://qpay.om/' },
+        templates: Object.assign({}, DEFAULT_TEMPLATES),
+        github: { owner: 'A7hraf', repo: '4x4wheelsoman', branch: 'main' }
+      },
+      categories: CAT.categories.map(c => ({ id: c.id, en: c.en, ar: c.ar })), vehicles: CAT.vehicles, makes: CAT.makes, brands: CAT.brands,
+      products, customers, suppliers, sales, expenses, purchases, moves: [], quotes, campaigns: [], waLog: [], demo: true
     };
   }
 
   // ---------- storage ----------
   let db = null;
+  function migrate(d) {
+    d.quotes = d.quotes || []; d.campaigns = d.campaigns || []; d.waLog = d.waLog || [];
+    d.settings.templates = Object.assign({}, DEFAULT_TEMPLATES, d.settings.templates || {});
+    d.settings.qpay = Object.assign({ enabled: true, limit: 500, installments: 4, feePct: 0, merchantId: '', payLink: 'https://qpay.om/' }, d.settings.qpay || {});
+    d.settings.github = Object.assign({ owner: 'A7hraf', repo: '4x4wheelsoman', branch: 'main' }, d.settings.github || {});
+    return d;
+  }
   function load() {
-    try {
-      const raw = localStorage.getItem(KEY);
-      if (raw) { db = JSON.parse(raw); return db; }
-    } catch (e) { /* storage blocked */ }
-    db = buildSeed();
-    save();
-    return db;
+    try { const raw = localStorage.getItem(KEY); if (raw) { db = migrate(JSON.parse(raw)); return db; } } catch (e) { }
+    db = buildSeed(); save(); return db;
   }
   function save() {
     let ok = true;
@@ -228,42 +173,43 @@
     return ok;
   }
   function reset() { db = buildSeed(); save(); return db; }
+  // keep the catalog, settings and customers; remove demo transactions and demo numbers
+  function startFresh() {
+    db.sales = []; db.expenses = []; db.purchases = []; db.moves = []; db.quotes = []; db.campaigns = []; db.waLog = []; db.customers = [];
+    db.products.forEach(p => { p.price = 0; p.cost = 0; p.stock = 0; p.oldPrice = 0; p.showPrice = false; });
+    db.demo = false; save();
+  }
   function exportJSON() { return JSON.stringify(db, null, 2); }
   function importJSON(text) {
     const d = JSON.parse(text);
     if (!d || !Array.isArray(d.products) || !Array.isArray(d.sales)) throw new Error('Invalid backup file');
-    db = d; save(); return db;
+    db = migrate(d); save(); return db;
   }
-
-  // keep tabs in sync (storefront ↔ dashboard)
   global.addEventListener('storage', (e) => {
-    if (e.key === KEY && e.newValue) { try { db = JSON.parse(e.newValue); global.dispatchEvent(new CustomEvent('db:change', { detail: { external: true } })); } catch (er) { } }
+    if (e.key === KEY && e.newValue) { try { db = migrate(JSON.parse(e.newValue)); global.dispatchEvent(new CustomEvent('db:change', { detail: { external: true } })); } catch (er) { } }
   });
 
   // ---------- domain helpers ----------
   const countsAsRevenue = (s) => s.status !== 'cancelled';
-  function product(id) { return db.products.find(p => p.id === id); }
-  function customer(id) { return db.customers.find(c => c.id === id); }
-  function supplier(id) { return db.suppliers.find(s => s.id === id); }
+  const product = (id) => db.products.find(p => p.id === id);
+  const customer = (id) => db.customers.find(c => c.id === id);
+  const supplier = (id) => db.suppliers.find(s => s.id === id);
+  const vehicle = (id) => (db.vehicles || []).find(v => v.id === id);
 
   function nextNo(prefix, start) {
     let max = start;
-    db.sales.concat(db.purchases).forEach(s => {
-      if (s.no && s.no.startsWith(prefix)) { const n = parseInt(s.no.slice(prefix.length), 10); if (n > max) max = n; }
-    });
+    db.sales.concat(db.purchases, db.quotes || []).forEach(s => { if (s.no && s.no.startsWith(prefix)) { const n = parseInt(s.no.slice(prefix.length), 10); if (n > max) max = n; } });
     return prefix + (max + 1);
   }
-
   function adjustStock(pid, qty, type, ref, note) {
     const p = product(pid); if (!p) return;
     p.stock = Math.max(0, (p.stock || 0) + qty);
     db.moves.unshift({ id: uid('m'), date: Date.now(), pid, qty, type, ref: ref || '', note: note || '' });
     if (db.moves.length > 1500) db.moves.length = 1500;
   }
-
   function createSale(o) {
     const vatRate = Number(db.settings.vat) || 0;
-    const items = o.items.map(it => { const p = product(it.pid); return { pid: it.pid, name: p.name, sku: p.sku, qty: it.qty, price: it.price != null ? it.price : p.price, cost: p.cost }; });
+    const items = o.items.map(it => { const p = product(it.pid); return { pid: it.pid, name: p.name, sku: p.partNumber || p.sku, qty: it.qty, price: it.price != null ? r3(it.price) : p.price, cost: p.cost || 0 }; });
     const subtotal = r3(items.reduce((s, it) => s + it.qty * it.price, 0));
     const discount = r3(Math.min(o.discount || 0, subtotal));
     const shippingFee = r3(o.shippingFee || 0);
@@ -276,28 +222,37 @@
       channel: online ? 'online' : 'shop', source: o.source || (online ? 'website' : 'pos'),
       customerId: cust ? cust.id : null, customerName: cust ? cust.name : (o.customerName || 'Walk-in customer'),
       phone: cust ? cust.phone : (o.phone || ''), items, subtotal, discount, vat, shippingFee, total,
-      payment: o.payment || 'cash', status: online ? 'new' : 'completed', city: o.city || '', address: o.address || '', note: o.note || ''
+      payment: o.payment || 'cash', status: online ? 'new' : 'completed', city: o.city || (cust ? cust.city : ''), address: o.address || '', note: o.note || '',
+      paid: o.payment === 'qpay' ? false : (o.paid != null ? o.paid : !online), quoteId: o.quoteId || null
     };
+    if (sale.payment === 'qpay') sale.qpay = { status: 'pending', requestedAt: null, approvedAt: null, settledAt: null, ref: '' };
     db.sales.push(sale);
     items.forEach(it => adjustStock(it.pid, -it.qty, 'sale', sale.no));
     save();
     return sale;
   }
-
   function setOrderStatus(id, status) {
     const s = db.sales.find(x => x.id === id); if (!s) return;
     if (status === 'cancelled' && s.status !== 'cancelled') s.items.forEach(it => adjustStock(it.pid, it.qty, 'return', s.no, 'Order cancelled'));
     if (s.status === 'cancelled' && status !== 'cancelled') s.items.forEach(it => adjustStock(it.pid, -it.qty, 'sale', s.no, 'Order re-opened'));
     s.status = status; save();
   }
-
-  function findOrCreateCustomer(name, phone, city) {
-    const clean = (phone || '').replace(/\s/g, '');
-    let c = clean && db.customers.find(x => x.phone.replace(/\s/g, '') === clean);
-    if (!c) { c = { id: uid('c'), name, phone, city: city || '', type: 'retail', created: Date.now() }; db.customers.push(c); }
+  function setQpay(id, status, ref) {
+    const s = db.sales.find(x => x.id === id); if (!s) return;
+    s.qpay = s.qpay || {}; s.qpay.status = status; if (ref != null) s.qpay.ref = ref;
+    const now = Date.now();
+    if (status === 'requested') s.qpay.requestedAt = now;
+    if (status === 'approved') { s.qpay.approvedAt = now; s.paid = true; }
+    if (status === 'settled') { s.qpay.settledAt = now; s.paid = true; if (!s.qpay.approvedAt) s.qpay.approvedAt = now; }
+    if (status === 'declined') s.paid = false;
+    save();
+  }
+  function findOrCreateCustomer(name, phone, city, extra) {
+    const clean = (phone || '').replace(/[^\d]/g, '');
+    let c = clean && db.customers.find(x => (x.phone || '').replace(/[^\d]/g, '').endsWith(clean.slice(-8)));
+    if (!c) { c = Object.assign({ id: uid('c'), name: name || 'Customer', phone: phone || '', city: city || '', type: 'retail', vehicle: '', optIn: true, created: Date.now() }, extra || {}); db.customers.push(c); }
     return c;
   }
-
   function receivePurchase(id) {
     const po = db.purchases.find(p => p.id === id); if (!po || po.status === 'received') return;
     po.status = 'received'; po.receivedAt = Date.now();
@@ -305,15 +260,14 @@
     db.expenses.push({ id: uid('e'), date: Date.now(), category: 'inventory', desc: 'Stock purchase ' + po.no, amount: po.total, method: 'transfer', ref: po.id });
     save();
   }
-
-  // revenue excl. VAT and shipping = net sales
+  function logWA(entry) { db.waLog.unshift(Object.assign({ id: uid('w'), date: Date.now() }, entry)); if (db.waLog.length > 800) db.waLog.length = 800; save(); }
   function netSales(s) { return s.subtotal - s.discount; }
-  function cogs(s) { return s.items.reduce((a, it) => a + it.qty * it.cost, 0); }
+  function cogs(s) { return s.items.reduce((a, it) => a + it.qty * (it.cost || 0), 0); }
 
   global.DB = {
-    load, save, reset, exportJSON, importJSON, uid, r3, DAY, GOVERNORATES,
+    load, save, reset, startFresh, exportJSON, importJSON, uid, r3, DAY, GOVERNORATES, DEFAULT_TEMPLATES,
     get data() { return db; },
-    product, customer, supplier, createSale, setOrderStatus, adjustStock, receivePurchase, findOrCreateCustomer,
+    product, customer, supplier, vehicle, createSale, setOrderStatus, setQpay, adjustStock, receivePurchase, findOrCreateCustomer, logWA,
     countsAsRevenue, netSales, cogs, nextNo
   };
 })(window);

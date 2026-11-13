@@ -5,6 +5,7 @@
   'use strict';
   const db = DB.load();
   const D = () => DB.data;
+  const H = window.BH = {};
   const t = I18N.t;
   I18N.set(D().settings.lang || 'en');
 
@@ -24,11 +25,11 @@
   const sod = (ts) => { const d = new Date(ts); d.setHours(0, 0, 0, 0); return d.getTime(); };
   const DAY = DB.DAY;
   const catName = (id) => { const c = D().categories.find(x => x.id === id); return c ? (c[I18N.lang] || c.en) : id; };
-  const CAT_COLOR = { wheels: '--c1', tyres: '--c8', suspension: '--c2', bumpers: '--c4', lighting: '--c6', recovery: '--c3', roof: '--c5', accessories: '--c7' };
+  const CAT_COLOR = { suspension: '--c1', 'wheels-tires': '--c8', lighting: '--c6', power: '--c4', recovery: '--c3', performance: '--c2', drivetrain: '--c5', 'side-steps': '--c7', tops: '--c4' };
   const CAT_ICON = { wheels: 'refresh', tyres: 'refresh', suspension: 'shield', bumpers: 'shield', lighting: 'sun', recovery: 'truck', roof: 'box', accessories: 'tag' };
   const cssVar = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
   const catColor = (id) => cssVar(CAT_COLOR[id] || '--c8');
-  const thumb = (p) => `<div class="thumb">${productArt(p)}</div>`;
+  const thumb = (p) => `<div class="thumb" style="background:#fff">${productArt(p, { fit: 'contain' })}</div>`;
   const statusPill = (s) => `<span class="pill s-${s}">${t('st_' + s)}</span>`;
   const srcLabel = (s) => t('src_' + s);
   const payLabel = (p) => t(p);
@@ -134,10 +135,13 @@
   const ROUTES = [
     { id: 'dashboard', icon: 'dashboard', grp: 'grp_ops' },
     { id: 'pos', icon: 'pos', grp: 'grp_ops' },
+    { id: 'quotes', icon: 'file', grp: 'grp_ops', badge: () => (D().quotes || []).filter(q => q.status === 'new').length },
     { id: 'orders', icon: 'orders', grp: 'grp_ops', badge: () => D().sales.filter(s => s.channel === 'online' && s.status === 'new').length },
     { id: 'inventory', icon: 'inventory', grp: 'grp_ops', badge: () => D().products.filter(p => p.active !== false && p.stock <= p.reorder).length },
     { id: 'purchases', icon: 'purchases', grp: 'grp_ops' },
+    { id: 'whatsapp', icon: 'megaphone', grp: 'grp_ai' },
     { id: 'advisor', icon: 'sparkle', grp: 'grp_ai' },
+    { id: 'qpay', icon: 'card', grp: 'grp_money', badge: () => D().sales.filter(x => x.payment === 'qpay' && x.qpay && x.qpay.status === 'pending' && x.status !== 'cancelled').length },
     { id: 'finance', icon: 'finance', grp: 'grp_money' },
     { id: 'reports', icon: 'reports', grp: 'grp_money' },
     { id: 'customers', icon: 'customers', grp: 'grp_admin' },
@@ -149,7 +153,7 @@
   function renderShell() {
     const s = D().settings;
     const initials = (s.name || 'BH').split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase();
-    let html = `<a class="logo" href="#/dashboard"><div class="logo-mark">4x4</div><div><b>${esc(s.name)}</b><small>Business Hub</small></div></a><nav class="nav">`;
+    let html = `<a class="logo" href="#/dashboard"><img src="assets/img/site/logo-mark.png" alt="" class="logo-img"><div><b>${esc(s.name)}</b><small>Business Hub</small></div></a><nav class="nav">`;
     let grp = '';
     ROUTES.forEach(r => {
       if (r.grp !== grp) { grp = r.grp; html += `<div class="nav-group">${t(grp)}</div>`; }
@@ -199,6 +203,7 @@
     const h = location.hash.replace(/^#\/?/, '') || 'dashboard';
     route = ROUTES.find(r => r.id === h) ? h : 'dashboard';
     $('#app').classList.remove('nav-open');
+    $$('.overlay').forEach(o => o.parentNode && o.parentNode.removeChild(o));
     render();
     window.scrollTo(0, 0);
   }
@@ -362,7 +367,7 @@
     const flow = ['new', 'processing', 'shipped', 'delivered'];
     const body = `
       <div class="grid g-2" style="gap:20px">
-        <dl class="kv"><dt>${t('order')}</dt><dd>${esc(s.no)}</dd><dt>${t('date')}</dt><dd>${fDT(s.date)}</dd><dt>${t('source')}</dt><dd>${srcLabel(s.source)}</dd><dt>${t('payment')}</dt><dd>${payLabel(s.payment)}</dd><dt>${t('status')}</dt><dd>${statusPill(s.status)}</dd></dl>
+        <dl class="kv"><dt>${t('order')}</dt><dd>${esc(s.no)}</dd><dt>${t('date')}</dt><dd>${fDT(s.date)}</dd><dt>${t('source')}</dt><dd>${srcLabel(s.source)}</dd><dt>${t('payment')}</dt><dd>${payLabel(s.payment)} ${s.paid === false ? `<span class="pill s-processing">${t('unpaid')}</span>` : `<span class="pill s-delivered">${t('paid')}</span>`}${s.qpay ? ` <span class="pill plain s-${H.qpayTone(s.qpay.status)}">Qpay · ${t('qp_' + s.qpay.status)}</span>` : ''}</dd><dt>${t('status')}</dt><dd>${statusPill(s.status)}</dd></dl>
         <dl class="kv"><dt>${t('customer')}</dt><dd>${esc(s.customerName)}</dd><dt>${t('phone')}</dt><dd>${esc(s.phone || '—')}</dd>${online ? `<dt>${t('city')}</dt><dd>${esc(s.city || '—')}</dd><dt>${t('address')}</dt><dd>${esc(s.address || '—')}</dd>` : ''}${s.note ? `<dt>${t('note')}</dt><dd>${esc(s.note)}</dd>` : ''}</dl>
       </div>
       <div class="card mt" style="box-shadow:none"><div class="table-wrap"><table class="t"><thead><tr><th>${t('product')}</th><th class="r">${t('qty')}</th><th class="r">${t('price')}</th><th class="r">${t('total')}</th></tr></thead><tbody>
@@ -378,11 +383,15 @@
       ${online ? `<div class="mt"><div class="field"><label>${t('status')}</label><div class="actions">${flow.concat('cancelled').map(st => `<button class="btn sm ${s.status === st ? 'primary' : ''}" data-set="${st}">${t('st_' + st)}</button>`).join('')}</div></div></div>` : ''}`;
     modal({
       title: `${t('order')} ${esc(s.no)}`, body, wide: true,
-      footer: `<button class="btn" id="oprint">${icon('printer')}${t('print')}</button>${online && flow.indexOf(s.status) > -1 && flow.indexOf(s.status) < 3 ? `<button class="btn primary" id="onext">${icon('arrowRight')}${t('st_' + flow[flow.indexOf(s.status) + 1])}</button>` : ''}`,
+      footer: `<div class="actions" style="margin-inline-end:auto"><button class="btn wa" id="obill">${H.WA}${t('send_bill')}</button><button class="btn" id="onotify">${icon('megaphone')}${t('notify')}</button>${s.payment === 'qpay' ? `<button class="btn" id="oqpay">${icon('card')}Qpay</button>` : ''}${s.paid === false && s.payment !== 'qpay' ? `<button class="btn" id="opaid">${icon('check')}${t('mark_paid')}</button>` : ''}</div><button class="btn" id="oprint">${icon('printer')}${t('print')}</button>${online && flow.indexOf(s.status) > -1 && flow.indexOf(s.status) < 3 ? `<button class="btn primary" id="onext">${icon('arrowRight')}${t('st_' + flow[flow.indexOf(s.status) + 1])}</button>` : ''}`,
       onMount: (el, m) => {
-        $$('[data-set]', el).forEach(b => b.onclick = () => { DB.setOrderStatus(s.id, b.dataset.set); m.close(); toast(t('saved')); render(); orderModal(s.id); });
-        if ($('#onext', el)) $('#onext', el).onclick = () => { DB.setOrderStatus(s.id, flow[flow.indexOf(s.status) + 1]); m.close(); toast(t('saved')); render(); };
+        $$('[data-set]', el).forEach(b => b.onclick = () => { DB.setOrderStatus(s.id, b.dataset.set); m.close(); toast(t('saved')); render(); if (s.phone && b.dataset.set !== 'cancelled' && b.dataset.set !== 'new') H.notifyModal(s, b.dataset.set); else orderModal(s.id); });
+        if ($('#onext', el)) $('#onext', el).onclick = () => { const nx = flow[flow.indexOf(s.status) + 1]; DB.setOrderStatus(s.id, nx); m.close(); toast(t('saved')); render(); if (s.phone) H.notifyModal(s, nx); };
         $('#oprint', el).onclick = () => { m.close(); receiptModal(s); };
+        $('#obill', el).onclick = () => H.sendBill(s);
+        $('#onotify', el).onclick = () => H.notifyModal(s);
+        if ($('#oqpay', el)) $('#oqpay', el).onclick = () => { m.close(); location.hash = '#/qpay'; };
+        if ($('#opaid', el)) $('#opaid', el).onclick = () => { s.paid = true; DB.save(); m.close(); toast(t('saved')); render(); };
       }
     });
   }
@@ -418,9 +427,9 @@
         <div class="field"><label>${t('phone')}</label><input class="input" id="f_phone" placeholder="+968"></div>
         <div class="field"><label>${t('city')}</label><select class="input" id="f_city">${DB.GOVERNORATES.map(g => `<option>${g}</option>`).join('')}</select></div>
         <div class="field"><label>${t('address')}</label><input class="input" id="f_addr"></div>
-        <div class="field"><label>${t('source')}</label><select class="input" id="f_src">${['website', 'instagram', 'whatsapp'].map(s => `<option value="${s}">${srcLabel(s)}</option>`).join('')}</select></div>
-        <div class="field"><label>${t('payment')}</label><select class="input" id="f_pay">${['cod', 'card', 'transfer'].map(s => `<option value="${s}">${payLabel(s)}</option>`).join('')}</select></div>
-        <div class="field"><label>${t('shipping')} (${cur()})</label><input class="input num" type="number" step="0.001" min="0" id="f_ship" value="2"></div>
+        <div class="field"><label>${t('source')}</label><select class="input" id="f_src">${['whatsapp', 'website', 'instagram'].map(s => `<option value="${s}">${srcLabel(s)}</option>`).join('')}</select></div>
+        <div class="field"><label>${t('payment')}</label><select class="input" id="f_pay">${['qpay', 'transfer', 'cod', 'card', 'cash'].map(s => `<option value="${s}">${payLabel(s)}</option>`).join('')}</select></div>
+        <div class="field"><label>${t('shipping')} (${cur()})</label><input class="input num" type="number" step="0.001" min="0" id="f_ship" value="0"></div>
         <div class="field"><label>${t('discount')} (${cur()})</label><input class="input num" type="number" step="0.001" min="0" id="f_disc" value="0"></div>
         <div class="field full"><label>${t('items')}</label><div id="f_lines"></div></div>
         <div class="field full"><label>${t('note')}</label><input class="input" id="f_note"></div>
@@ -456,8 +465,8 @@
         <div class="ln"><span>Subtotal</span><span>${fmt(s.subtotal)}</span></div>${s.discount ? `<div class="ln"><span>Discount</span><span>-${fmt(s.discount)}</span></div>` : ''}
         <div class="ln"><span>VAT ${st.vat}%</span><span>${fmt(s.vat)}</span></div>${s.shippingFee ? `<div class="ln"><span>Shipping</span><span>${fmt(s.shippingFee)}</span></div>` : ''}
         <div class="ln" style="font-weight:800;font-size:14px"><span>TOTAL ${esc(cur())}</span><span>${fmt(s.total)}</span></div><div class="ln"><span>Paid by</span><span>${esc(t(s.payment))}</span></div><hr><div class="c">Thank you for your business!</div></div>`,
-      footer: `<button class="btn" data-close>${t('close')}</button><button class="btn primary" id="rprint">${icon('printer')}${t('print')}</button>`,
-      onMount: (el) => $('#rprint', el).onclick = () => window.print()
+      footer: `<button class="btn wa" id="rbill" style="margin-inline-end:auto">${H.WA}${t('send_bill')}</button><button class="btn" data-close>${t('close')}</button><button class="btn primary" id="rprint">${icon('printer')}${t('print')}</button>`,
+      onMount: (el) => { $('#rprint', el).onclick = () => window.print(); $('#rbill', el).onclick = () => H.sendBill(s); }
     });
   }
 
@@ -481,31 +490,31 @@
       $('#pgrid').innerHTML = list.map(p => {
         const inCart = (state.cart.find(c => c.pid === p.id) || {}).qty || 0;
         const left = p.stock - inCart;
-        return `<button class="pcard" data-pid="${p.id}" ${left <= 0 ? 'disabled' : ''}><div class="art">${productArt(p)}</div>
+        return `<button class="pcard" data-pid="${p.id}" ${left <= 0 ? 'disabled' : ''}><div class="art" style="background:#fff">${productArt(p, { fit: 'contain' })}</div>
           <div class="nm">${esc(p.name)}</div><div class="row"><span class="pr num">${fmt(p.price)}</span><span class="${left <= p.reorder ? 'neg-val' : 'faint'}">${left} ${t('in_stock').toLowerCase()}</span></div></button>`;
       }).join('') || `<div class="empty">${t('no_results')}</div>`;
       $$('.pcard', $('#pgrid')).forEach(b => b.onclick = () => { addToCart(b.dataset.pid); });
     };
     const addToCart = (pid) => {
       const p = DB.product(pid); const l = state.cart.find(c => c.pid === pid);
-      if (l) { if (l.qty < p.stock) l.qty++; } else state.cart.push({ pid, qty: 1 });
+      if (l) l.qty++; else state.cart.push({ pid, qty: 1, price: p.price || 0 });
       drawGrid(); drawCart();
     };
     const drawCart = () => {
       const vatR = D().settings.vat;
-      const sub = state.cart.reduce((a, l) => a + l.qty * DB.product(l.pid).price, 0);
+      const sub = state.cart.reduce((a, l) => a + l.qty * (l.price || 0), 0);
       const disc = Math.min(state.posDisc || 0, sub);
       const vat = (sub - disc) * vatR / 100, tot = sub - disc + vat;
       $('#cart').innerHTML = `<div class="card-h" style="padding-bottom:12px;border-bottom:1px solid var(--border)"><h3>${icon('cart')} ${t('new_sale')}</h3>${state.cart.length ? `<button class="btn sm ghost" id="cclr">${t('clear')}</button>` : ''}</div>
         <div style="padding:12px 16px 0"><select class="input" id="pcust"><option value="">${t('walk_in')}</option>${D().customers.slice().sort((a, b) => a.name.localeCompare(b.name)).map(c => `<option value="${c.id}" ${state.posCust === c.id ? 'selected' : ''}>${esc(c.name)} · ${esc(c.phone)}</option>`).join('')}</select></div>
-        <div class="cart-items">${state.cart.length ? state.cart.map(l => { const p = DB.product(l.pid); return `<div class="cline"><div><div class="nm">${esc(p.name)}</div><div class="faint" style="font-size:12px">${fmt(p.price)} × ${l.qty}</div></div><b class="num">${fmt(p.price * l.qty)}</b>
+        <div class="cart-items">${state.cart.length ? state.cart.map(l => { const p = DB.product(l.pid); return `<div class="cline"><div><div class="nm">${esc(p.name)}</div><div class="faint" style="font-size:12px;display:flex;gap:6px;align-items:center">${cur()} <input class="input num pprice" data-pp="${p.id}" type="number" min="0" step="0.5" value="${l.price || ''}" placeholder="${t('price')}" style="width:96px;padding:2px 6px"> × ${l.qty}</div></div><b class="num">${fmt((l.price || 0) * l.qty)}</b>
           <div class="qty"><button data-dec="${p.id}" aria-label="-">${icon('minus')}</button><span class="num">${l.qty}</span><button data-inc="${p.id}" aria-label="+">${icon('plus')}</button></div><button class="btn sm ghost danger" data-rm="${p.id}">${icon('trash')}</button></div>`; }).join('') : `<div class="empty">${icon('cart')}<br>${t('cart_empty')}</div>`}</div>
         <div class="totals">
           <div class="ln"><span>${t('subtotal')}</span>${money(sub)}</div>
           <div class="ln" style="align-items:center"><span>${t('discount')}</span><input class="input num" id="pdisc" type="number" min="0" step="0.5" value="${state.posDisc || ''}" placeholder="0.000" style="width:110px;text-align:end;padding:4px 8px"></div>
           <div class="ln"><span>${t('vat')} (${vatR}%)</span>${money(vat)}</div>
           <div class="ln big"><span>${t('grand_total')}</span>${money(tot)}</div>
-          <div class="pay-opts">${['cash', 'card', 'transfer'].map(p => `<button data-pay="${p}" class="${state.posPay === p ? 'on' : ''}">${t(p)}</button>`).join('')}</div>
+          <div class="pay-opts">${['cash', 'card', 'qpay'].map(p => `<button data-pay="${p}" class="${state.posPay === p ? 'on' : ''}">${t(p)}</button>`).join('')}</div>
           <button class="btn primary lg" style="width:100%" id="pcharge" ${state.cart.length ? '' : 'disabled'}>${icon('check')}${t('charge')} ${moneyTxt(tot)}</button>
         </div>`;
       const c = $('#cart');
@@ -513,12 +522,14 @@
       $$('[data-dec]', c).forEach(b => b.onclick = () => { const l = state.cart.find(x => x.pid === b.dataset.dec); l.qty--; if (l.qty <= 0) state.cart = state.cart.filter(x => x !== l); drawGrid(); drawCart(); });
       $$('[data-rm]', c).forEach(b => b.onclick = () => { state.cart = state.cart.filter(x => x.pid !== b.dataset.rm); drawGrid(); drawCart(); });
       $$('[data-pay]', c).forEach(b => b.onclick = () => { state.posPay = b.dataset.pay; drawCart(); });
+      $$('[data-pp]', c).forEach(inp => inp.onchange = () => { const l = state.cart.find(x => x.pid === inp.dataset.pp); l.price = Math.max(0, parseFloat(inp.value) || 0); drawCart(); });
       if ($('#cclr')) $('#cclr').onclick = () => { state.cart = []; state.posDisc = 0; drawGrid(); drawCart(); };
       $('#pcust').onchange = (e) => state.posCust = e.target.value;
       $('#pdisc').onchange = (e) => { state.posDisc = Math.max(0, parseFloat(e.target.value) || 0); drawCart(); };
       $('#pcharge').onclick = () => {
         if (!state.cart.length) return;
-        const sale = DB.createSale({ channel: 'shop', source: 'pos', customerId: state.posCust || null, payment: state.posPay, discount: state.posDisc, items: state.cart.map(l => ({ pid: l.pid, qty: l.qty })) });
+        if (state.cart.some(l => !(l.price > 0))) { toast(t('enter_prices')); const e = $('.pprice[value=""]', c) || $('.pprice', c); if (e) e.focus(); return; }
+        const sale = DB.createSale({ channel: 'shop', source: 'pos', customerId: state.posCust || null, payment: state.posPay, discount: state.posDisc, items: state.cart.map(l => ({ pid: l.pid, qty: l.qty, price: l.price || 0 })) });
         state.cart = []; state.posDisc = 0; state.posCust = '';
         renderShell(); drawGrid(); drawCart();
         toast(`${t('sale_done')} · ${sale.no}`);
@@ -589,20 +600,22 @@
 
   function productModal(p) {
     const isNew = !p;
-    p = p || { sku: '', name: '', brand: '', category: 'accessories', cost: 0, price: 0, stock: 0, reorder: 2, location: '', fitment: 'Universal', active: true, online: true, image: '', oldPrice: 0, description: '', featured: false };
+    p = p || { sku: '', partNumber: '', name: '', nameAr: '', brand: '', category: D().categories[0].id, cost: 0, price: 0, stock: 0, reorder: 2, location: '', fitment: 'Universal fit', vehicles: [], active: true, online: true, showPrice: false, image: '', oldPrice: 0, description: '', descriptionAr: '', featured: false };
     let img = p.image || '';
     const f = (k, lbl, type, extra) => `<div class="field ${extra || ''}"><label>${lbl}</label><input class="input ${type === 'number' ? 'num' : ''}" id="p_${k}" type="${type || 'text'}" ${type === 'number' ? 'step="0.001" min="0"' : ''} value="${esc(p[k])}"></div>`;
     modal({
       title: isNew ? t('add_product') : t('edit_product'), wide: true,
       body: `<div class="photo-row"><div class="photo-box" id="p_photo"></div><div><div class="field"><label>${t('photo')}</label><div class="actions"><label class="btn sm">${icon('image')}${t('upload')}<input type="file" id="p_file" accept="image/*" hidden></label><button class="btn sm ghost danger" id="p_rmimg" type="button">${t('remove_photo')}</button></div><p class="faint" style="margin:6px 0 0;font-size:12.5px">JPG / PNG · auto-resized</p></div></div></div>
-        <div class="form-grid mt">${f('name', t('product'), 'text', 'full')}${f('sku', t('sku'))}${f('brand', t('brand'))}
+        <div class="form-grid mt">${f('name', t('product') + ' (EN)', 'text', 'full')}<div class="field full"><label>${t('product')} (عربي)</label><input class="input" id="p_nameAr" dir="rtl" value="${esc(p.nameAr || '')}"></div>${f('partNumber', t('part_no'))}${f('brand', t('brand'))}
         <div class="field"><label>${t('category')}</label><select class="input" id="p_category">${D().categories.map(c => `<option value="${c.id}" ${p.category === c.id ? 'selected' : ''}>${catName(c.id)}</option>`).join('')}</select></div>
         ${f('fitment', t('fitment'))}${f('cost', `${t('cost')} (${cur()})`, 'number')}${f('price', `${t('price')} (${cur()})`, 'number')}
         ${isNew ? f('stock', t('stock'), 'number') : `<div class="field"><label>${t('stock')}</label><div class="input" style="background:var(--surface-2)">${p.stock} — ${t('adjust_stock')} ↗</div></div>`}
         ${f('reorder', t('reorder'), 'number')}${f('location', t('location'))}${f('oldPrice', `${t('old_price')} (${cur()})`, 'number')}
-        <div class="field"><label>&nbsp;</label><label class="check"><input type="checkbox" id="p_online" ${p.online !== false ? 'checked' : ''}> ${t('active_online')}</label><label class="check"><input type="checkbox" id="p_featured" ${p.featured ? 'checked' : ''}> ${t('featured')}</label></div>
-        <div class="field full"><label>${t('description')}</label><textarea class="input" id="p_description" rows="3">${esc(p.description || '')}</textarea></div>
-      </div>${!isNew ? `<div class="notice mt">${icon('reports')}<div>${t('margin')}: <b>${pct((p.price - p.cost) / p.price * 100)}</b> · ${t('stock_value')}: <b>${moneyTxt(p.stock * p.cost)}</b></div></div>` : ''}`,
+        <div class="field"><label>&nbsp;</label><label class="check"><input type="checkbox" id="p_online" ${p.online !== false ? 'checked' : ''}> ${t('active_online')}</label><label class="check"><input type="checkbox" id="p_showPrice" ${p.showPrice ? 'checked' : ''}> ${t('show_price')}</label><label class="check"><input type="checkbox" id="p_featured" ${p.featured ? 'checked' : ''}> ${t('featured')}</label></div>
+        <div class="field full"><label>${t('fits_vehicles')}</label><div class="veh-checks">${(D().vehicles || []).map(v => `<label class="check"><input type="checkbox" class="p_veh" value="${v.id}" ${(p.vehicles || []).includes(v.id) ? 'checked' : ''}> ${esc(v.make)} ${esc(v.en)}</label>`).join('')}</div></div>
+        <div class="field full"><label>${t('description')} (EN)</label><textarea class="input" id="p_description" rows="3">${esc(p.description || '')}</textarea></div>
+        <div class="field full"><label>${t('description')} (عربي)</label><textarea class="input" id="p_descriptionAr" dir="rtl" rows="3">${esc(p.descriptionAr || '')}</textarea></div>
+      </div>${!isNew ? `<div class="notice mt">${icon('reports')}<div>${t('margin')}: <b>${p.price ? pct((p.price - p.cost) / p.price * 100) : '—'}</b> · ${t('stock_value')}: <b>${moneyTxt(p.stock * p.cost)}</b></div></div>` : ''}`,
       footer: `${!isNew ? `<button class="btn danger" id="p_del" style="margin-inline-end:auto">${icon('trash')}${t('delete')}</button>` : ''}<button class="btn" data-close>${t('cancel')}</button><button class="btn primary" id="p_save">${icon('check')}${t('save')}</button>`,
       onMount: (el, m) => {
         const drawImg = () => { $('#p_photo', el).innerHTML = productArt(Object.assign({}, p, { image: img, category: $('#p_category', el).value })); $('#p_rmimg', el).classList.toggle('hide', !img); };
@@ -613,7 +626,8 @@
         $('#p_save', el).onclick = () => {
           const g = (k) => $('#p_' + k, el);
           const name = g('name').value.trim(); if (!name) { g('name').focus(); return; }
-          const data = { name, sku: g('sku').value.trim() || 'SKU-' + Date.now().toString(36).toUpperCase(), brand: g('brand').value.trim(), category: g('category').value, fitment: g('fitment').value.trim(), cost: DB.r3(+g('cost').value || 0), price: DB.r3(+g('price').value || 0), reorder: Math.max(0, parseInt(g('reorder').value, 10) || 0), location: g('location').value.trim(), online: g('online').checked, featured: g('featured').checked, oldPrice: DB.r3(+g('oldPrice').value || 0), description: g('description').value.trim(), image: img };
+          const pn = g('partNumber').value.trim();
+          const data = { name, nameAr: g('nameAr').value.trim(), partNumber: pn, sku: pn || p.sku || 'SKU-' + Date.now().toString(36).toUpperCase(), slug: p.slug || (name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60) + '-' + Date.now().toString(36).slice(-4)), vehicles: $$('.p_veh:checked', el).map(x => x.value), showPrice: g('showPrice').checked, descriptionAr: g('descriptionAr').value.trim(), bullets: p.bullets || [], bulletsAr: p.bulletsAr || [], allMakes: p.allMakes || [], brand: g('brand').value.trim(), category: g('category').value, fitment: g('fitment').value.trim(), cost: DB.r3(+g('cost').value || 0), price: DB.r3(+g('price').value || 0), reorder: Math.max(0, parseInt(g('reorder').value, 10) || 0), location: g('location').value.trim(), online: g('online').checked, featured: g('featured').checked, oldPrice: DB.r3(+g('oldPrice').value || 0), description: g('description').value.trim(), image: img };
           if (isNew) { const np = Object.assign({ id: DB.uid('p'), active: true, stock: 0 }, data); D().products.push(np); const st = parseInt(g('stock').value, 10) || 0; if (st) DB.adjustStock(np.id, st, 'adjust', '', 'Opening stock'); }
           else Object.assign(p, data);
           if (!DB.save()) alert('Browser storage is full — the photo was not saved. Use a smaller photo or remove some.');
@@ -805,14 +819,14 @@
       </div>
       <div class="card mt"><div class="toolbar"><div class="search-in">${icon('search')}<input class="input" id="cq" placeholder="${t('search')}" value="${esc(state.custQ)}"></div></div>
         <div class="table-wrap">${list.length ? `<table class="t"><thead><tr><th>${t('customer')}</th><th>${t('phone')}</th><th>${t('city')}</th><th>${t('type')}</th><th class="r">${t('orders_n')}</th><th class="r">${t('total_spent')}</th><th>${t('last_order')}</th></tr></thead><tbody>
-          ${list.map(x => `<tr class="click" data-cid="${x.c.id}"><td><div class="cell-prod" style="min-width:0"><div class="avatar" style="width:32px;height:32px;font-size:12px">${esc(x.c.name.split(/\s+/).map(w => w[0]).join('').slice(0, 2))}</div><b>${esc(x.c.name)}</b></div></td><td class="muted">${esc(x.c.phone)}</td><td>${esc(x.c.city)}</td><td><span class="chip">${t(x.c.type)}</span></td><td class="r num">${x.n}</td><td class="r strong">${money(x.spent)}</td><td class="muted">${x.last ? fDate(x.last) : '—'}</td></tr>`).join('')}</tbody></table>` : `<div class="empty">${t('no_results')}</div>`}</div></div>`;
+          ${list.map(x => `<tr class="click" data-cid="${x.c.id}"><td><div class="cell-prod" style="min-width:0"><div class="avatar" style="width:32px;height:32px;font-size:12px">${esc(x.c.name.split(/\s+/).map(w => w[0]).join('').slice(0, 2))}</div><b>${esc(x.c.name)}</b></div></td><td class="muted">${esc(x.c.phone)}</td><td>${esc(x.c.city)}</td><td><span class="chip">${t(x.c.type)}</span>${x.c.vehicle && DB.vehicle(x.c.vehicle) ? ` <span class="chip">${esc(DB.vehicle(x.c.vehicle).en)}</span>` : ''}</td><td class="r num">${x.n}</td><td class="r strong">${money(x.spent)}</td><td class="muted">${x.last ? fDate(x.last) : '—'}</td></tr>`).join('')}</tbody></table>` : `<div class="empty">${t('no_results')}</div>`}</div></div>`;
     const cq = $('#cq'); cq.oninput = debounce(() => { state.custQ = cq.value; render(); const e = $('#cq'); e.focus(); e.setSelectionRange(e.value.length, e.value.length); }, 250);
     $$('[data-cid]', v).forEach(tr => tr.onclick = () => customerModal(tr.dataset.cid));
     $('#cadd').onclick = () => modal({
       title: t('add_customer'),
-      body: `<div class="form-grid"><div class="field full"><label>${t('customer_name')}</label><input class="input" id="k_n"></div><div class="field"><label>${t('phone')}</label><input class="input" id="k_p" placeholder="+968"></div><div class="field"><label>${t('city')}</label><input class="input" id="k_c" value="Muscat"></div><div class="field"><label>${t('type')}</label><select class="input" id="k_t"><option value="retail">${t('retail')}</option><option value="workshop">${t('workshop')}</option></select></div></div>`,
+      body: `<div class="form-grid"><div class="field full"><label>${t('customer_name')}</label><input class="input" id="k_n"></div><div class="field"><label>${t('phone')}</label><input class="input" id="k_p" placeholder="+968"></div><div class="field"><label>${t('city')}</label><input class="input" id="k_c" value="Muscat"></div><div class="field"><label>${t('type')}</label><select class="input" id="k_t"><option value="retail">${t('retail')}</option><option value="workshop">${t('workshop')}</option></select></div><div class="field"><label>${t('vehicle')}</label><select class="input" id="k_v"><option value="">—</option>${(D().vehicles || []).map(v => `<option value="${v.id}">${esc(v.make)} ${esc(v.en)}</option>`).join('')}</select></div><div class="field full"><label class="check"><input type="checkbox" id="k_o" checked> ${t('opt_in')}</label></div></div>`,
       footer: `<button class="btn" data-close>${t('cancel')}</button><button class="btn primary" id="k_s">${t('save')}</button>`,
-      onMount: (el, m) => $('#k_s', el).onclick = () => { const n = $('#k_n', el).value.trim(); if (!n) return; D().customers.push({ id: DB.uid('c'), name: n, phone: $('#k_p', el).value.trim(), city: $('#k_c', el).value.trim(), type: $('#k_t', el).value, created: Date.now() }); DB.save(); m.close(); toast(t('saved')); render(); }
+      onMount: (el, m) => $('#k_s', el).onclick = () => { const n = $('#k_n', el).value.trim(); if (!n) return; D().customers.push({ id: DB.uid('c'), name: n, phone: $('#k_p', el).value.trim(), city: $('#k_c', el).value.trim(), type: $('#k_t', el).value, vehicle: $('#k_v', el).value, optIn: $('#k_o', el).checked, created: Date.now() }); DB.save(); m.close(); toast(t('saved')); render(); }
     });
   }
   function customerModal(id) {
@@ -970,10 +984,12 @@
         <div class="card"><div class="card-h"><h3>${t('business_info')}</h3></div><div class="card-b">
           <div class="form-grid">${f('name', t('business_name'))}${f('tagline', t('tagline'))}${f('phone', t('phone'))}${f('email', t('email'), 'email')}${f('address', t('address'))}${f('cr', t('cr_no'))}${f('vat', t('vat_rate'), 'number')}${f('currency', 'Currency')}</div>
           <h3 style="margin:22px 0 12px;font-size:15px">${icon('store')} ${t('store_settings')}</h3>
-          <div class="form-grid">${f('whatsapp', t('whatsapp_no'))}${f('shipping', `${t('ship_fee')} (${s.currency})`, 'number')}${f('freeShipOver', `${t('free_ship')} (${s.currency})`, 'number')}<div></div>
-            <div class="field full"><label>${t('hero_title')}</label><input class="input" id="st_heroTitle" value="${esc(s.heroTitle || '')}"></div>
-            <div class="field full"><label>${t('hero_text')}</label><textarea class="input" id="st_heroText" rows="2">${esc(s.heroText || '')}</textarea></div></div>
-          <div class="actions mt"><button class="btn primary" id="st_save">${icon('check')}${t('save')}</button><a class="btn" href="index.html" target="_blank" rel="noopener">${icon('external')}${t('open_store')}</a></div></div></div>
+          <div class="form-grid">${f('whatsapp', t('whatsapp_no'))}${f('instagram', 'Instagram')}${f('maps', 'Google Maps link')}${f('siteUrl', t('site_url'))}${f('rating', 'Google rating')}${f('followers', 'Instagram followers')}
+            <div class="field full"><label class="check"><input type="checkbox" id="st_showStock" ${s.showStock ? 'checked' : ''}> ${t('show_stock')}</label></div></div>
+          <h3 style="margin:22px 0 12px;font-size:15px">${icon('card')} Qpay</h3>
+          <div class="form-grid"><div class="field"><label>${t('qp_limit')} (${s.currency})</label><input class="input num" type="number" id="st_qlimit" value="${s.qpay.limit}"></div><div class="field"><label>${t('qp_fee')} %</label><input class="input num" type="number" step="0.1" id="st_qfee" value="${s.qpay.feePct}"></div>
+            <div class="field"><label>${t('qp_merchant')}</label><input class="input" id="st_qmid" value="${esc(s.qpay.merchantId)}"></div><div class="field"><label>${t('qp_link')}</label><input class="input" id="st_qlink" value="${esc(s.qpay.payLink)}"></div></div>
+          <div class="actions mt"><button class="btn primary" id="st_save">${icon('check')}${t('save')}</button><a class="btn" href="index.html?preview" target="_blank" rel="noopener">${icon('external')}${t('preview_store')}</a></div></div></div>
         <div>
           <div class="card"><div class="card-h"><h3>${t('language')} & ${t('theme')}</h3></div><div class="card-b">
             <div class="field"><label>${t('language')}</label><div class="seg" id="st_lang"><button data-k="en" class="${I18N.lang === 'en' ? 'on' : ''}">English</button><button data-k="ar" class="${I18N.lang === 'ar' ? 'on' : ''}">العربية</button></div></div>
@@ -981,12 +997,13 @@
           <div class="card mt"><div class="card-h"><h3>${icon('sparkle')} ${t('ai_key')}</h3>${AI.getKey() ? `<span class="pill s-delivered">ON</span>` : ''}</div><div class="card-b">
             <p class="muted" style="margin:0 0 10px">${t('ai_key_help')}</p>
             <div class="actions"><input class="input" id="st_key" type="password" autocomplete="off" placeholder="${AI.getKey() ? '•••••••• ' + esc(AI.getKey().slice(-4)) : 'sk-ant-…'}" style="flex:1;min-width:180px"><button class="btn primary" id="st_keysave">${t('save')}</button>${AI.getKey() ? `<button class="btn danger" id="st_keyrm">${t('remove_key')}</button>` : ''}</div></div></div>
+          ${H.publishCard()}
           <div class="card mt"><div class="card-h"><h3>${t('data_mgmt')}</h3></div><div class="card-b">
             <div class="notice">${icon('alert')}<div>${t('unpaid_note')}</div></div>
-            <div class="actions mt"><button class="btn" id="st_bk">${icon('download')}${t('backup')}</button><label class="btn">${icon('upload')}${t('restore')}<input type="file" id="st_rs" accept=".json,application/json" hidden></label><button class="btn danger" id="st_reset">${icon('refresh')}${t('reset_demo')}</button></div></div></div>
+            <div class="actions mt"><button class="btn" id="st_bk">${icon('download')}${t('backup')}</button><label class="btn">${icon('upload')}${t('restore')}<input type="file" id="st_rs" accept=".json,application/json" hidden></label><button class="btn danger" id="st_reset">${icon('refresh')}${t('reset_demo')}</button>${D().demo ? `<button class="btn primary" id="st_fresh">${icon('check')}${t('start_fresh')}</button>` : ''}</div>${D().demo ? `<p class="faint" style="font-size:12.5px;margin:8px 0 0">${t('start_fresh_help')}</p>` : ''}</div></div>
         </div>
       </div>`;
-    $('#st_save').onclick = () => { ['name', 'tagline', 'phone', 'email', 'address', 'cr', 'currency', 'whatsapp', 'heroTitle', 'heroText'].forEach(k => s[k] = $('#st_' + k).value.trim()); ['vat', 'shipping', 'freeShipOver'].forEach(k => s[k] = Math.max(0, parseFloat($('#st_' + k).value) || 0)); DB.save(); toast(t('saved')); render(); };
+    $('#st_save').onclick = () => { ['name', 'tagline', 'phone', 'email', 'address', 'cr', 'currency', 'whatsapp', 'instagram', 'maps', 'siteUrl', 'rating', 'followers'].forEach(k => s[k] = $('#st_' + k).value.trim()); s.whatsapp = s.whatsapp.replace(/[^\d]/g, ''); if (s.siteUrl && !s.siteUrl.endsWith('/')) s.siteUrl += '/'; s.vat = Math.max(0, parseFloat($('#st_vat').value) || 0); s.showStock = $('#st_showStock').checked; s.qpay.limit = Math.max(0, parseFloat($('#st_qlimit').value) || 0); s.qpay.feePct = Math.max(0, parseFloat($('#st_qfee').value) || 0); s.qpay.merchantId = $('#st_qmid').value.trim(); s.qpay.payLink = $('#st_qlink').value.trim(); DB.save(); toast(t('saved')); render(); };
     $('#st_keysave').onclick = () => { const k = $('#st_key').value.trim(); if (!k) return; AI.setKey(k); toast(t('saved')); render(); };
     if ($('#st_keyrm')) $('#st_keyrm').onclick = () => { AI.setKey(''); toast(t('deleted')); render(); };
     bindSeg('st_lang', k => setLang(k));
@@ -994,13 +1011,18 @@
     $('#st_bk').onclick = () => download(`business-hub-backup-${new Date().toISOString().slice(0, 10)}.json`, DB.exportJSON(), 'application/json');
     $('#st_rs').onchange = (e) => { const file = e.target.files[0]; if (!file) return; const rd = new FileReader(); rd.onload = () => { try { DB.importJSON(rd.result); toast(t('saved')); render(); } catch (er) { alert(er.message); } }; rd.readAsText(file); };
     $('#st_reset').onclick = () => confirmBox(t('reset_demo') + '?', () => { DB.reset(); state.cart = []; toast(t('saved')); render(); });
+    if ($('#st_fresh')) $('#st_fresh').onclick = () => confirmBox(t('start_fresh_help'), () => { DB.startFresh(); state.cart = []; toast(t('saved')); render(); });
+    H.bindPublish(v);
   }
 
   function setLang(l) { D().settings.lang = l; DB.save(); I18N.set(l); render(); }
   function setTheme(th) { D().settings.theme = th; DB.save(); document.documentElement.dataset.theme = th; render(); }
 
+  Object.assign(H, { D, t, $, $$, esc, fmt, money, moneyTxt, big, pct, fDate, fDT, modal, toast, confirmBox, download, csv, kpi, statusPill, payLabel, srcLabel, render: () => render(), state, bindSeg, linesEditor, orderModal, catName, thumb, debounce, range, inRange, summarize, chart, cssVar, rangeSeg, cur });
   const VIEWS = { advisor: viewAdvisor, dashboard: viewDashboard, pos: viewPOS, orders: viewOrders, inventory: viewInventory, purchases: viewPurchases, finance: viewFinance, customers: viewCustomers, reports: viewReports, settings: viewSettings };
 
+  (window.BH_EXT || []).forEach(f => f(H, VIEWS, ROUTES));
+  if (D().settings.theme && !document.documentElement.dataset.theme) document.documentElement.dataset.theme = D().settings.theme;
   // ---------------- boot ----------------
   $('#menuBtn').onclick = () => $('#app').classList.toggle('nav-open');
   $('#scrim').onclick = () => $('#app').classList.remove('nav-open');

@@ -79,6 +79,7 @@
   let lang = 'en';
   global.I18N = {
     set(l) { lang = S[l] ? l : 'en'; document.documentElement.lang = lang; document.documentElement.dir = lang === 'ar' ? 'rtl' : 'ltr'; },
+    add(l, d) { S[l] = Object.assign(S[l] || {}, d); },
     get lang() { return lang; },
     t(k) { return (S[lang] && S[lang][k]) || S.en[k] || k; }
   };
