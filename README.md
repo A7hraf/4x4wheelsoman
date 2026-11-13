@@ -4,8 +4,8 @@ A complete management system for an off-road / 4x4 parts business in Oman. It's 
 
 | Page | What it does |
 |---|---|
-| `index.html` (admin dashboard) | Dashboard, Point of Sale, Online Orders, Inventory, Purchasing, **AI Advisor**, Finance, Reports, Customers, Settings |
-| `store.html` (online store) | Home with offers, shop with categories and filters, product pages, cart, checkout, **order via WhatsApp**, Arabic / English |
+| `admin.html` (admin dashboard) | Dashboard, Point of Sale, Online Orders, Inventory, Purchasing, **AI Advisor**, Finance, Reports, Customers, Settings |
+| `index.html` (online store) | Home with offers, shop with categories and filters, product pages, cart, checkout, **order via WhatsApp**, Arabic / English |
 
 ## Features
 
@@ -37,8 +37,8 @@ A complete management system for an off-road / 4x4 parts business in Oman. It's 
 1. Push this folder to a GitHub repository.
 2. In the repository, go to **Settings → Pages → Build and deployment**, choose **Deploy from a branch**, then select `main` and `/ (root)`.
 3. After about a minute the site is live at `https://<user>.github.io/<repo>/`:
-   - Admin: `…/index.html`
-   - Store: `…/store.html`
+   - Store (send this to customers): `https://<user>.github.io/<repo>/`
+   - Admin (keep private): `https://<user>.github.io/<repo>/admin.html`
 
 ## Connect the AI (optional)
 
@@ -63,8 +63,8 @@ This version has no server. All data (products, orders, customers, expenses) is 
 ## Files
 
 ```
-index.html            admin dashboard
-store.html            online store
+index.html            online store (main page)
+admin.html            admin dashboard
 assets/css/app.css    admin styles
 assets/css/store.css  store styles
 assets/js/db.js       data layer + demo data

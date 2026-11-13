@@ -1,6 +1,6 @@
 /* ============================================================
    Business Hub – data layer (localStorage)
-   Shared by the dashboard (index.html) and storefront (store.html)
+   Shared by the dashboard (admin.html) and storefront (index.html)
    ============================================================ */
 (function (global) {
   const KEY = 'bh_db_v1';

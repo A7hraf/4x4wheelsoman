@@ -156,7 +156,7 @@
       const b = r.badge ? r.badge() : 0;
       html += `<a href="#/${r.id}" class="${route === r.id ? 'active' : ''}">${icon(r.icon)}<span>${t(r.id)}</span>${b ? `<span class="badge">${b}</span>` : ''}</a>`;
     });
-    html += `</nav><div class="side-foot"><a class="store-link" href="store.html" target="_blank" rel="noopener">${icon('store')}<div>${t('storefront')}<small>${t('open_store')} ↗</small></div></a></div>`;
+    html += `</nav><div class="side-foot"><a class="store-link" href="index.html" target="_blank" rel="noopener">${icon('store')}<div>${t('storefront')}<small>${t('open_store')} ↗</small></div></a></div>`;
     $('#side').innerHTML = html;
     $('#menuBtn').innerHTML = icon('menu');
     $('#langBtn').innerHTML = `<span style="font-weight:700;font-size:12px">${I18N.lang === 'ar' ? 'EN' : 'ع'}</span>`;
@@ -238,7 +238,7 @@
           <a class="btn primary" href="#/pos">${icon('pos')}${t('new_sale')}</a>
           <a class="btn" href="#/orders">${icon('orders')}${t('orders')}${pending.length ? ` · ${pending.length}` : ''}</a>
           <a class="btn" href="#/advisor">${icon('sparkle')}${t('advisor')}</a>
-          <a class="btn" href="store.html" target="_blank" rel="noopener">${icon('external')}${t('open_store')}</a>
+          <a class="btn" href="index.html" target="_blank" rel="noopener">${icon('external')}${t('open_store')}</a>
         </div>
       </section>
       <div class="page-head" style="margin-bottom:14px"><div></div>${rangeSeg(state.dashRange, 'dseg')}</div>
@@ -973,7 +973,7 @@
           <div class="form-grid">${f('whatsapp', t('whatsapp_no'))}${f('shipping', `${t('ship_fee')} (${s.currency})`, 'number')}${f('freeShipOver', `${t('free_ship')} (${s.currency})`, 'number')}<div></div>
             <div class="field full"><label>${t('hero_title')}</label><input class="input" id="st_heroTitle" value="${esc(s.heroTitle || '')}"></div>
             <div class="field full"><label>${t('hero_text')}</label><textarea class="input" id="st_heroText" rows="2">${esc(s.heroText || '')}</textarea></div></div>
-          <div class="actions mt"><button class="btn primary" id="st_save">${icon('check')}${t('save')}</button><a class="btn" href="store.html" target="_blank" rel="noopener">${icon('external')}${t('open_store')}</a></div></div></div>
+          <div class="actions mt"><button class="btn primary" id="st_save">${icon('check')}${t('save')}</button><a class="btn" href="index.html" target="_blank" rel="noopener">${icon('external')}${t('open_store')}</a></div></div></div>
         <div>
           <div class="card"><div class="card-h"><h3>${t('language')} & ${t('theme')}</h3></div><div class="card-b">
             <div class="field"><label>${t('language')}</label><div class="seg" id="st_lang"><button data-k="en" class="${I18N.lang === 'en' ? 'on' : ''}">English</button><button data-k="ar" class="${I18N.lang === 'ar' ? 'on' : ''}">العربية</button></div></div>

@@ -122,7 +122,7 @@
         <div><h4>${t('quick')}</h4><a href="#/shop">${t('shop')}</a><a href="#/offers">${t('offers')}</a>${D().categories.slice(0, 4).map(c => `<a href="#/shop?c=${c.id}">${catName(c.id)}</a>`).join('')}</div>
         <div><h4>${t('help')}</h4><a href="tel:${esc(s.phone)}">${esc(s.phone)}</a><a href="${waLink(t('wa_hello', { shop: s.name }))}" target="_blank" rel="noopener">WhatsApp</a><a href="mailto:${esc(s.email)}">${esc(s.email)}</a><span>${t('hours')}</span></div>
         <div><h4>${t('contact')}</h4><span>${esc(s.address)}</span><p style="margin-top:12px">${t('brands')}: ${brands.slice(0, 6).map(esc).join(', ')}…</p></div>
-      </div><div class="bottom"><span>© ${new Date().getFullYear()} ${esc(s.name)}. ${t('rights')}</span><a href="index.html">${t('admin')} ↗</a></div></div></footer>
+      </div><div class="bottom"><span>© ${new Date().getFullYear()} ${esc(s.name)}. ${t('rights')}</span></div></div></footer>
       <a class="fab" href="${waLink(t('wa_hello', { shop: s.name }))}" target="_blank" rel="noopener" aria-label="WhatsApp">${WA_ICON}</a>`;
   }
   function drawCartCount() { const n = $('#cartN'); if (n) n.textContent = cartQty(); }
