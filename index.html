@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Business Hub</title>
+  <meta name="description" content="Shop, online sales, inventory and finance control panel for an off-road parts business.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23d9480f'/%3E%3Ctext x='16' y='21' font-family='Arial' font-weight='800' font-size='12' fill='white' text-anchor='middle'%3E4x4%3C/text%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/app.css">
+  <script>try{var t=JSON.parse(localStorage.getItem('bh_db_v1')||'{}').settings||{};if(t.theme)document.documentElement.dataset.theme=t.theme;if(t.lang==='ar'){document.documentElement.lang='ar';document.documentElement.dir='rtl';}}catch(e){}</script>
+</head>
+<body>
+  <div class="app" id="app">
+    <aside class="side" id="side"></aside>
+    <div class="scrim" id="scrim"></div>
+    <div class="main">
+      <header class="topbar">
+        <button class="icon-btn menu-btn" id="menuBtn" aria-label="Menu"></button>
+        <h1 id="pageTitle">Dashboard</h1>
+        <div class="spacer"></div>
+        <div class="gsearch" id="gsearch"></div>
+        <button class="icon-btn" id="langBtn" title="English / العربية"></button>
+        <button class="icon-btn" id="themeBtn" title="Theme"></button>
+        <div class="avatar hide-sm" id="avatar">TH</div>
+      </header>
+      <main class="content" id="view"></main>
+    </div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <script src="assets/js/icons.js"></script>
+  <script src="assets/js/i18n.js"></script>
+  <script src="assets/js/art.js"></script>
+  <script src="assets/js/db.js"></script>
+  <script src="assets/js/ai.js"></script>
+  <script src="assets/js/app.js"></script>
+</body>
+</html>
