@@ -55,9 +55,9 @@
     const first = ov.querySelector('input, select, textarea'); if (first) first.focus();
     return m;
   }
-  function confirmBox(msg, onYes) {
+  function confirmBox(msg, onYes, yesLabel) {
     modal({
-      title: t('delete'), body: `<p>${esc(msg)}</p>`, footer: `<button class="btn" data-close>${t('cancel')}</button><button class="btn primary" id="yes">${t('delete')}</button>`,
+      title: yesLabel || t('delete'), body: `<p>${esc(msg)}</p>`, footer: `<button class="btn" data-close>${t('cancel')}</button><button class="btn primary" id="yes">${yesLabel || t('delete')}</button>`,
       onMount: (el, m) => $('#yes', el).onclick = () => { m.close(); onYes(); }
     });
   }
@@ -195,7 +195,7 @@
       setTimeout(() => {
         if (a.dataset.prod) productModal(D().products.find(p => p.id === a.dataset.prod));
         if (a.dataset.order) orderModal(a.dataset.order);
-        if (a.dataset.cust) customerModal(a.dataset.cust);
+        if (a.dataset.cust) H.customerModal(a.dataset.cust);
       }, 60);
     };
     inp.onblur = () => setTimeout(() => res.classList.add('hide'), 200);
@@ -385,7 +385,7 @@
       ${online ? `<div class="mt"><div class="field"><label>${t('status')}</label><div class="actions">${flow.concat('cancelled').map(st => `<button class="btn sm ${s.status === st ? 'primary' : ''}" data-set="${st}">${t('st_' + st)}</button>`).join('')}</div></div></div>` : ''}`;
     modal({
       title: `${t('order')} ${esc(s.no)}`, body, wide: true,
-      footer: `<div class="actions" style="margin-inline-end:auto"><button class="btn wa" id="obill">${H.WA}${t('send_bill')}</button><button class="btn" id="onotify">${icon('megaphone')}${t('notify')}</button>${s.payment === 'qpay' ? `<button class="btn" id="oqpay">${icon('card')}Qpay</button>` : ''}${s.paid === false && s.payment !== 'qpay' ? `<button class="btn" id="opaid">${icon('check')}${t('mark_paid')}</button>` : ''}</div><button class="btn" id="oprint">${icon('printer')}${t('print')}</button>${online && flow.indexOf(s.status) > -1 && flow.indexOf(s.status) < 3 ? `<button class="btn primary" id="onext">${icon('arrowRight')}${t('st_' + flow[flow.indexOf(s.status) + 1])}</button>` : ''}`,
+      footer: `<div class="actions" style="margin-inline-end:auto"><button class="btn wa" id="obill">${H.WA}${t('send_bill')}</button><button class="btn" id="onotify">${icon('megaphone')}${t('notify')}</button>${s.payment === 'qpay' ? `<button class="btn" id="oqpay">${icon('card')}Qpay</button>` : ''}${s.paid === false && s.payment !== 'qpay' ? `<button class="btn" id="opaid">${icon('check')}${t('mark_paid')}</button>` : ''}${['completed', 'delivered'].includes(s.status) ? `<button class="btn ghost" id="orefund">${icon('refresh')}${t('refund')}</button>` : ''}</div><button class="btn" id="oprint">${icon('printer')}${t('print')}</button>${online && flow.indexOf(s.status) > -1 && flow.indexOf(s.status) < 3 ? `<button class="btn primary" id="onext">${icon('arrowRight')}${t('st_' + flow[flow.indexOf(s.status) + 1])}</button>` : ''}`,
       onMount: (el, m) => {
         $$('[data-set]', el).forEach(b => b.onclick = () => { DB.setOrderStatus(s.id, b.dataset.set); m.close(); toast(t('saved')); render(); if (s.phone && b.dataset.set !== 'cancelled' && b.dataset.set !== 'new') H.notifyModal(s, b.dataset.set); else orderModal(s.id); });
         if ($('#onext', el)) $('#onext', el).onclick = () => { const nx = flow[flow.indexOf(s.status) + 1]; DB.setOrderStatus(s.id, nx); m.close(); toast(t('saved')); render(); if (s.phone) H.notifyModal(s, nx); };
@@ -393,6 +393,7 @@
         $('#obill', el).onclick = () => H.sendBill(s);
         $('#onotify', el).onclick = () => H.notifyModal(s);
         if ($('#oqpay', el)) $('#oqpay', el).onclick = () => { m.close(); location.hash = '#/qpay'; };
+        if ($('#orefund', el)) $('#orefund', el).onclick = () => { m.close(); H.refundModal(s); };
         if ($('#opaid', el)) $('#opaid', el).onclick = () => { s.paid = true; DB.save(); m.close(); toast(t('saved')); render(); };
       }
     });
@@ -466,81 +467,10 @@
         ${s.items.map(it => `<div>${esc(it.name)}</div><div class="ln"><span>${it.qty} x ${fmt(it.price)}</span><span>${fmt(it.qty * it.price)}</span></div>`).join('')}<hr>
         <div class="ln"><span>Subtotal</span><span>${fmt(s.subtotal)}</span></div>${s.discount ? `<div class="ln"><span>Discount</span><span>-${fmt(s.discount)}</span></div>` : ''}
         <div class="ln"><span>VAT ${st.vat}%</span><span>${fmt(s.vat)}</span></div>${s.shippingFee ? `<div class="ln"><span>Shipping</span><span>${fmt(s.shippingFee)}</span></div>` : ''}
-        <div class="ln" style="font-weight:800;font-size:14px"><span>TOTAL ${esc(cur())}</span><span>${fmt(s.total)}</span></div><div class="ln"><span>Paid by</span><span>${esc(t(s.payment))}</span></div><hr><div class="c">Thank you for your business!</div></div>`,
+        <div class="ln" style="font-weight:800;font-size:14px"><span>TOTAL ${esc(cur())}</span><span>${fmt(s.total)}</span></div><div class="ln"><span>Paid by</span><span>${esc(s.payment === 'qpay' ? 'Qpay' : t(s.payment))}</span></div>${s.cashReceived ? `<div class="ln"><span>Cash</span><span>${fmt(s.cashReceived)}</span></div><div class="ln"><span>Change</span><span>${fmt(s.change)}</span></div>` : ''}${(s.returns || []).length ? `<div class="ln"><span>Returned</span><span>-${fmt(s.returns.reduce((a, r) => a + r.amount, 0))}</span></div>` : ''}<hr><div class="c">Thank you for your business!</div></div>`,
       footer: `<button class="btn wa" id="rbill" style="margin-inline-end:auto">${H.WA}${t('send_bill')}</button><button class="btn" data-close>${t('close')}</button><button class="btn primary" id="rprint">${icon('printer')}${t('print')}</button>`,
       onMount: (el) => { $('#rprint', el).onclick = () => window.print(); $('#rbill', el).onclick = () => H.sendBill(s); }
     });
-  }
-
-  // =====================================================
-  // POINT OF SALE
-  // =====================================================
-  function viewPOS(v) {
-    v.innerHTML = `<div class="pos">
-      <div>
-        <div class="toolbar card" style="border-radius:12px">
-          <div class="search-in" style="max-width:none">${icon('search')}<input class="input" id="pq" placeholder="${t('search')} — ${t('product')}, ${t('sku')}, ${t('brand')}" value="${esc(state.posQ)}"></div>
-        </div>
-        <div class="pos-cats" id="pcats"><button data-c="all" class="${state.posCat === 'all' ? 'on' : ''}">${t('all_categories')}</button>${D().categories.map(c => `<button data-c="${c.id}" class="${state.posCat === c.id ? 'on' : ''}">${catName(c.id)}</button>`).join('')}</div>
-        <div class="pos-grid" id="pgrid"></div>
-      </div>
-      <div class="card cart" id="cart"></div>
-    </div>`;
-    const drawGrid = () => {
-      const q = state.posQ.toLowerCase();
-      const list = D().products.filter(p => p.active !== false && (state.posCat === 'all' || p.category === state.posCat) && (!q || (p.name + ' ' + p.sku + ' ' + p.brand + ' ' + p.fitment).toLowerCase().includes(q)));
-      $('#pgrid').innerHTML = list.map(p => {
-        const inCart = (state.cart.find(c => c.pid === p.id) || {}).qty || 0;
-        const left = p.stock - inCart;
-        return `<button class="pcard" data-pid="${p.id}" ${left <= 0 ? 'disabled' : ''}><div class="art" style="background:#fff">${productArt(p, { fit: 'contain' })}</div>
-          <div class="nm">${esc(p.name)}</div><div class="row"><span class="pr num">${fmt(p.price)}</span><span class="${left <= p.reorder ? 'neg-val' : 'faint'}">${left} ${t('in_stock').toLowerCase()}</span></div></button>`;
-      }).join('') || `<div class="empty">${t('no_results')}</div>`;
-      $$('.pcard', $('#pgrid')).forEach(b => b.onclick = () => { addToCart(b.dataset.pid); });
-    };
-    const addToCart = (pid) => {
-      const p = DB.product(pid); const l = state.cart.find(c => c.pid === pid);
-      if (l) l.qty++; else state.cart.push({ pid, qty: 1, price: p.price || 0 });
-      drawGrid(); drawCart();
-    };
-    const drawCart = () => {
-      const vatR = D().settings.vat;
-      const sub = state.cart.reduce((a, l) => a + l.qty * (l.price || 0), 0);
-      const disc = Math.min(state.posDisc || 0, sub);
-      const vat = (sub - disc) * vatR / 100, tot = sub - disc + vat;
-      $('#cart').innerHTML = `<div class="card-h" style="padding-bottom:12px;border-bottom:1px solid var(--border)"><h3>${icon('cart')} ${t('new_sale')}</h3>${state.cart.length ? `<button class="btn sm ghost" id="cclr">${t('clear')}</button>` : ''}</div>
-        <div style="padding:12px 16px 0"><select class="input" id="pcust"><option value="">${t('walk_in')}</option>${D().customers.slice().sort((a, b) => a.name.localeCompare(b.name)).map(c => `<option value="${c.id}" ${state.posCust === c.id ? 'selected' : ''}>${esc(c.name)} · ${esc(c.phone)}</option>`).join('')}</select></div>
-        <div class="cart-items">${state.cart.length ? state.cart.map(l => { const p = DB.product(l.pid); return `<div class="cline"><div><div class="nm">${esc(p.name)}</div><div class="faint" style="font-size:12px;display:flex;gap:6px;align-items:center">${cur()} <input class="input num pprice" data-pp="${p.id}" type="number" min="0" step="0.5" value="${l.price || ''}" placeholder="${t('price')}" style="width:96px;padding:2px 6px"> × ${l.qty}</div></div><b class="num">${fmt((l.price || 0) * l.qty)}</b>
-          <div class="qty"><button data-dec="${p.id}" aria-label="-">${icon('minus')}</button><span class="num">${l.qty}</span><button data-inc="${p.id}" aria-label="+">${icon('plus')}</button></div><button class="btn sm ghost danger" data-rm="${p.id}">${icon('trash')}</button></div>`; }).join('') : `<div class="empty">${icon('cart')}<br>${t('cart_empty')}</div>`}</div>
-        <div class="totals">
-          <div class="ln"><span>${t('subtotal')}</span>${money(sub)}</div>
-          <div class="ln" style="align-items:center"><span>${t('discount')}</span><input class="input num" id="pdisc" type="number" min="0" step="0.5" value="${state.posDisc || ''}" placeholder="0.000" style="width:110px;text-align:end;padding:4px 8px"></div>
-          <div class="ln"><span>${t('vat')} (${vatR}%)</span>${money(vat)}</div>
-          <div class="ln big"><span>${t('grand_total')}</span>${money(tot)}</div>
-          <div class="pay-opts">${['cash', 'card', 'qpay'].map(p => `<button data-pay="${p}" class="${state.posPay === p ? 'on' : ''}">${t(p)}</button>`).join('')}</div>
-          <button class="btn primary lg" style="width:100%" id="pcharge" ${state.cart.length ? '' : 'disabled'}>${icon('check')}${t('charge')} ${moneyTxt(tot)}</button>
-        </div>`;
-      const c = $('#cart');
-      $$('[data-inc]', c).forEach(b => b.onclick = () => addToCart(b.dataset.inc));
-      $$('[data-dec]', c).forEach(b => b.onclick = () => { const l = state.cart.find(x => x.pid === b.dataset.dec); l.qty--; if (l.qty <= 0) state.cart = state.cart.filter(x => x !== l); drawGrid(); drawCart(); });
-      $$('[data-rm]', c).forEach(b => b.onclick = () => { state.cart = state.cart.filter(x => x.pid !== b.dataset.rm); drawGrid(); drawCart(); });
-      $$('[data-pay]', c).forEach(b => b.onclick = () => { state.posPay = b.dataset.pay; drawCart(); });
-      $$('[data-pp]', c).forEach(inp => inp.onchange = () => { const l = state.cart.find(x => x.pid === inp.dataset.pp); l.price = Math.max(0, parseFloat(inp.value) || 0); drawCart(); });
-      if ($('#cclr')) $('#cclr').onclick = () => { state.cart = []; state.posDisc = 0; drawGrid(); drawCart(); };
-      $('#pcust').onchange = (e) => state.posCust = e.target.value;
-      $('#pdisc').onchange = (e) => { state.posDisc = Math.max(0, parseFloat(e.target.value) || 0); drawCart(); };
-      $('#pcharge').onclick = () => {
-        if (!state.cart.length) return;
-        if (state.cart.some(l => !(l.price > 0))) { toast(t('enter_prices')); const e = $('.pprice[value=""]', c) || $('.pprice', c); if (e) e.focus(); return; }
-        const sale = DB.createSale({ channel: 'shop', source: 'pos', customerId: state.posCust || null, payment: state.posPay, discount: state.posDisc, items: state.cart.map(l => ({ pid: l.pid, qty: l.qty, price: l.price || 0 })) });
-        state.cart = []; state.posDisc = 0; state.posCust = '';
-        renderShell(); drawGrid(); drawCart();
-        toast(`${t('sale_done')} · ${sale.no}`);
-        receiptModal(sale);
-      };
-    };
-    drawGrid(); drawCart();
-    $$('#pcats button').forEach(b => b.onclick = () => { state.posCat = b.dataset.c; $$('#pcats button').forEach(x => x.classList.toggle('on', x === b)); drawGrid(); });
-    $('#pq').oninput = (e) => { state.posQ = e.target.value; drawGrid(); };
   }
 
   // =====================================================
@@ -801,48 +731,6 @@
   }
 
   // =====================================================
-  // CUSTOMERS
-  // =====================================================
-  function custStats(c) {
-    const s = D().sales.filter(x => x.customerId === c.id && DB.countsAsRevenue(x));
-    return { n: s.length, spent: s.reduce((a, x) => a + x.total, 0), last: s.reduce((a, x) => Math.max(a, x.date), 0) };
-  }
-  function viewCustomers(v) {
-    const q = state.custQ.toLowerCase();
-    const list = D().customers.filter(c => !q || (c.name + ' ' + c.phone + ' ' + c.city).toLowerCase().includes(q)).map(c => Object.assign({ c }, custStats(c))).sort((a, b) => b.spent - a.spent);
-    const all = D().customers.map(custStats);
-    v.innerHTML = `
-      <div class="page-head"><div><h2>${t('customers')}</h2><p>${D().customers.length} ${t('customers').toLowerCase()}</p></div><div class="actions"><button class="btn primary" id="cadd">${icon('plus')}${t('add_customer')}</button></div></div>
-      <div class="grid g-kpi">
-        ${kpi('customers', 'tone-brand', t('customers'), `<span class="num">${D().customers.length}</span>`, `<span>${D().customers.filter(c => c.type === 'workshop').length} ${t('workshop')}</span>`)}
-        ${kpi('finance', 'tone-ok', t('total_spent'), big(all.reduce((a, s) => a + s.spent, 0)), '')}
-        ${kpi('orders', 'tone-info', t('avg_order'), big(all.reduce((a, s) => a + s.spent, 0) / Math.max(1, all.reduce((a, s) => a + s.n, 0))), '')}
-        ${kpi('star', 'tone-violet', 'Repeat', `<span class="num">${all.filter(s => s.n > 1).length}</span>`, `<span>${pct(all.filter(s => s.n > 1).length / Math.max(1, all.length) * 100)}</span>`)}
-      </div>
-      <div class="card mt"><div class="toolbar"><div class="search-in">${icon('search')}<input class="input" id="cq" placeholder="${t('search')}" value="${esc(state.custQ)}"></div></div>
-        <div class="table-wrap">${list.length ? `<table class="t"><thead><tr><th>${t('customer')}</th><th>${t('phone')}</th><th>${t('city')}</th><th>${t('type')}</th><th class="r">${t('orders_n')}</th><th class="r">${t('total_spent')}</th><th>${t('last_order')}</th></tr></thead><tbody>
-          ${list.map(x => `<tr class="click" data-cid="${x.c.id}"><td><div class="cell-prod" style="min-width:0"><div class="avatar" style="width:32px;height:32px;font-size:12px">${esc(x.c.name.split(/\s+/).map(w => w[0]).join('').slice(0, 2))}</div><b>${esc(x.c.name)}</b></div></td><td class="muted">${esc(x.c.phone)}</td><td>${esc(x.c.city)}</td><td><span class="chip">${t(x.c.type)}</span>${x.c.vehicle && DB.vehicle(x.c.vehicle) ? ` <span class="chip">${esc(DB.vehicle(x.c.vehicle).en)}</span>` : ''}</td><td class="r num">${x.n}</td><td class="r strong">${money(x.spent)}</td><td class="muted">${x.last ? fDate(x.last) : '—'}</td></tr>`).join('')}</tbody></table>` : `<div class="empty">${t('no_results')}</div>`}</div></div>`;
-    const cq = $('#cq'); cq.oninput = debounce(() => { state.custQ = cq.value; render(); const e = $('#cq'); e.focus(); e.setSelectionRange(e.value.length, e.value.length); }, 250);
-    $$('[data-cid]', v).forEach(tr => tr.onclick = () => customerModal(tr.dataset.cid));
-    $('#cadd').onclick = () => modal({
-      title: t('add_customer'),
-      body: `<div class="form-grid"><div class="field full"><label>${t('customer_name')}</label><input class="input" id="k_n"></div><div class="field"><label>${t('phone')}</label><input class="input" id="k_p" placeholder="+968"></div><div class="field"><label>${t('city')}</label><input class="input" id="k_c" value="Muscat"></div><div class="field"><label>${t('type')}</label><select class="input" id="k_t"><option value="retail">${t('retail')}</option><option value="workshop">${t('workshop')}</option></select></div><div class="field"><label>${t('vehicle')}</label><select class="input" id="k_v"><option value="">—</option>${(D().vehicles || []).map(v => `<option value="${v.id}">${esc(v.make)} ${esc(v.en)}</option>`).join('')}</select></div><div class="field full"><label class="check"><input type="checkbox" id="k_o" checked> ${t('opt_in')}</label></div></div>`,
-      footer: `<button class="btn" data-close>${t('cancel')}</button><button class="btn primary" id="k_s">${t('save')}</button>`,
-      onMount: (el, m) => $('#k_s', el).onclick = () => { const n = $('#k_n', el).value.trim(); if (!n) return; D().customers.push({ id: DB.uid('c'), name: n, phone: $('#k_p', el).value.trim(), city: $('#k_c', el).value.trim(), type: $('#k_t', el).value, vehicle: $('#k_v', el).value, optIn: $('#k_o', el).checked, created: Date.now() }); DB.save(); m.close(); toast(t('saved')); render(); }
-    });
-  }
-  function customerModal(id) {
-    const c = DB.customer(id); if (!c) return; const st = custStats(c);
-    const orders = D().sales.filter(s => s.customerId === id).sort((a, b) => b.date - a.date);
-    modal({
-      title: esc(c.name), wide: true,
-      body: `<div class="grid g-3" style="margin-bottom:16px">${kpi('orders', 'tone-info', t('orders_n'), `<span class="num">${st.n}</span>`, '')}${kpi('finance', 'tone-ok', t('total_spent'), big(st.spent), '')}${kpi('phone', 'tone-brand', t('phone'), `<span style="font-size:16px">${esc(c.phone || '—')}</span>`, `<span>${esc(c.city)} · ${t(c.type)}</span>`)}</div>
-        <div class="card" style="box-shadow:none"><div class="table-wrap">${ordersTable(orders, true)}</div></div>`,
-      onMount: (el, m) => $$('[data-oid]', el).forEach(tr => tr.onclick = () => { m.close(); orderModal(tr.dataset.oid); })
-    });
-  }
-
-  // =====================================================
   // REPORTS
   // =====================================================
   function viewReports(v) {
@@ -1038,8 +926,8 @@
   function setLang(l) { D().settings.lang = l; DB.save(); I18N.set(l); render(); }
   function setTheme(th) { D().settings.theme = th; DB.save(); document.documentElement.dataset.theme = th; render(); }
 
-  Object.assign(H, { D, t, $, $$, esc, fmt, money, moneyTxt, big, pct, fDate, fDT, modal, toast, confirmBox, download, csv, kpi, statusPill, payLabel, srcLabel, render: () => render(), state, bindSeg, linesEditor, orderModal, catName, thumb, debounce, range, inRange, summarize, chart, cssVar, rangeSeg, cur });
-  const VIEWS = { advisor: viewAdvisor, dashboard: viewDashboard, pos: viewPOS, orders: viewOrders, inventory: viewInventory, purchases: viewPurchases, finance: viewFinance, customers: viewCustomers, reports: viewReports, settings: viewSettings };
+  Object.assign(H, { receiptModal, ordersTable, renderShell, D, t, $, $$, esc, fmt, money, moneyTxt, big, pct, fDate, fDT, modal, toast, confirmBox, download, csv, kpi, statusPill, payLabel, srcLabel, render: () => render(), state, bindSeg, linesEditor, orderModal, catName, thumb, debounce, range, inRange, summarize, chart, cssVar, rangeSeg, cur });
+  const VIEWS = { advisor: viewAdvisor, dashboard: viewDashboard, orders: viewOrders, inventory: viewInventory, purchases: viewPurchases, finance: viewFinance, reports: viewReports, settings: viewSettings }; // pos & customers: admin-pos.js
 
   (window.BH_EXT || []).forEach(f => f(H, VIEWS, ROUTES));
   if (D().settings.theme && !document.documentElement.dataset.theme) document.documentElement.dataset.theme = D().settings.theme;

@@ -156,7 +156,7 @@
   // ---------- storage ----------
   let db = null;
   function migrate(d) {
-    d.quotes = d.quotes || []; d.campaigns = d.campaigns || []; d.waLog = d.waLog || [];
+    d.quotes = d.quotes || []; d.held = d.held || []; d.campaigns = d.campaigns || []; d.waLog = d.waLog || [];
     d.settings.templates = Object.assign({}, DEFAULT_TEMPLATES, d.settings.templates || {});
     d.settings.qpay = Object.assign({ enabled: true, limit: 500, installments: 4, feePct: 0, merchantId: '', payLink: 'https://qpay.om/' }, d.settings.qpay || {});
     d.settings.github = Object.assign({ owner: 'A7hraf', repo: '4x4wheelsoman', branch: 'main' }, d.settings.github || {});
@@ -190,7 +190,7 @@
   });
 
   // ---------- domain helpers ----------
-  const countsAsRevenue = (s) => s.status !== 'cancelled';
+  const countsAsRevenue = (s) => s.status !== 'cancelled' && s.status !== 'refunded';
   const product = (id) => db.products.find(p => p.id === id);
   const customer = (id) => db.customers.find(c => c.id === id);
   const supplier = (id) => db.suppliers.find(s => s.id === id);
@@ -260,6 +260,29 @@
     db.expenses.push({ id: uid('e'), date: Date.now(), category: 'inventory', desc: 'Stock purchase ' + po.no, amount: po.total, method: 'transfer', ref: po.id });
     save();
   }
+  // Return items from a sale (full or partial): restock, reduce the sale, keep a log.
+  // qtys = array of quantities to return, same order as sale.items
+  function returnItems(id, qtys, reason) {
+    const s = db.sales.find(x => x.id === id); if (!s) return;
+    const vatRate = Number(db.settings.vat) || 0;
+    const discRatio = s.subtotal ? s.discount / s.subtotal : 0;
+    const back = [];
+    s.items.forEach((it, k) => {
+      const q = Math.max(0, Math.min(it.qty, qtys[k] || 0)); if (!q) return;
+      it.qty -= q; back.push({ pid: it.pid, name: it.name, qty: q, price: it.price });
+      adjustStock(it.pid, q, 'return', s.no, reason || 'Customer return');
+    });
+    if (!back.length) return;
+    const before = s.total;
+    s.items = s.items.filter(it => it.qty > 0);
+    s.subtotal = r3(s.items.reduce((a, it) => a + it.qty * it.price, 0));
+    s.discount = r3(s.subtotal * discRatio);
+    s.vat = r3((s.subtotal - s.discount) * vatRate / 100);
+    s.total = r3(s.subtotal - s.discount + s.vat + (s.items.length ? (s.shippingFee || 0) : 0));
+    if (!s.items.length) { s.status = 'refunded'; s.shippingFee = 0; s.total = 0; }
+    s.returns = (s.returns || []).concat({ date: Date.now(), items: back, amount: r3(before - s.total), reason: reason || '' });
+    save();
+  }
   function logWA(entry) { db.waLog.unshift(Object.assign({ id: uid('w'), date: Date.now() }, entry)); if (db.waLog.length > 800) db.waLog.length = 800; save(); }
   function netSales(s) { return s.subtotal - s.discount; }
   function cogs(s) { return s.items.reduce((a, it) => a + it.qty * (it.cost || 0), 0); }
@@ -267,7 +290,7 @@
   global.DB = {
     load, save, reset, startFresh, exportJSON, importJSON, uid, r3, DAY, GOVERNORATES, DEFAULT_TEMPLATES,
     get data() { return db; },
-    product, customer, supplier, vehicle, createSale, setOrderStatus, setQpay, adjustStock, receivePurchase, findOrCreateCustomer, logWA,
+    product, customer, supplier, vehicle, createSale, setOrderStatus, setQpay, returnItems, adjustStock, receivePurchase, findOrCreateCustomer, logWA,
     countsAsRevenue, netSales, cogs, nextNo
   };
 })(window);

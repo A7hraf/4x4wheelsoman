@@ -381,3 +381,6 @@ select.field { padding-inline-end: 10px; }
 }
 .foot .cols a.ct, .foot .cols .ct { display: flex; gap: 10px; align-items: flex-start; }
 @media (max-width: 900px) { .hero::before { background: linear-gradient(180deg, rgba(0,0,0,.55) 0%, rgba(0,0,0,.72) 45%, #050505 100%); } [dir="rtl"] .hero::before { background: linear-gradient(180deg, rgba(0,0,0,.55) 0%, rgba(0,0,0,.72) 45%, #050505 100%); } }
+.pdp > *, .quote > *, .qp > *, .fit > * { min-width: 0; }
+.pdp h1 { overflow-wrap: anywhere; }
+.qrow .btn { min-width: 0; white-space: normal; line-height: 1.2; text-align: center; padding: 0 14px; }
