@@ -111,6 +111,8 @@
     Chart.defaults.plugins.tooltip.padding = 10;
     Chart.defaults.plugins.tooltip.cornerRadius = 8;
     Chart.defaults.maintainAspectRatio = false;
+    // phones: skip chart animations (they block the screen on slower devices)
+    Chart.defaults.animation = matchMedia('(max-width: 860px), (prefers-reduced-motion: reduce)').matches ? false : Chart.defaults.animation;
   }
   const moneyTick = (v) => (Math.abs(v) >= 1000 ? (v / 1000).toFixed(v % 1000 ? 1 : 0) + 'k' : v);
   const tipMoney = { callbacks: { label: (c) => ` ${c.dataset.label || c.label}: ${moneyTxt(c.parsed.y != null ? c.parsed.y : c.parsed)}` } };
@@ -908,15 +910,29 @@
       </div>`;
     bindSeg('aseg', k => { state.advDays = +k; render(); });
     const log = $('#chatLog');
-    const drawLog = (liveText) => {
+    // Full render only when the conversation changes (start / end of an answer).
+    // While the AI is writing, only the live bubble is updated, at most ~4 times a second —
+    // re-rendering the whole chat on every streamed token froze (and crashed) phones.
+    const nearBottom = () => log.scrollHeight - log.scrollTop - log.clientHeight < 80;
+    const drawLog = () => {
       const msgs = state.chat.map(m => `<div class="msg ${m.role}">${m.role === 'assistant' ? `<div class="md">${AI.md(m.content)}</div>` : esc(m.content)}</div>`).join('');
-      const live = state.aiBusy ? `<div class="msg assistant">${liveText ? `<div class="md">${AI.md(liveText)}</div>` : `<div class="typing"><i></i><i></i><i></i> ${t('thinking')}</div>`}</div>` : '';
+      const live = state.aiBusy ? `<div class="msg assistant" id="liveMsg">${state.aiLive ? `<div class="md">${AI.md(state.aiLive)}</div>` : `<div class="typing"><i></i><i></i><i></i> ${t('thinking')}</div>`}</div>` : '';
       log.innerHTML = msgs + live || `<div class="empty">${icon('sparkle', 'big')}<p>${hasKey ? t('ask_ph') : t('no_key')}</p></div>`;
       log.scrollTop = log.scrollHeight;
       $('#chips').classList.toggle('hide', state.chat.length > 0);
       $('#chatSend').innerHTML = state.aiBusy ? icon('x') : icon('send');
       $('#chatSend').title = state.aiBusy ? t('stop') : '';
     };
+    let paintTimer = null, lastPaint = 0;
+    const paintLive = () => {
+      paintTimer = null; lastPaint = Date.now();
+      const el = $('#liveMsg');
+      if (!el || !document.body.contains(log)) return;
+      const stick = nearBottom();
+      el.innerHTML = `<div class="md">${AI.md(state.aiLive)}</div>`;
+      if (stick) log.scrollTop = log.scrollHeight;
+    };
+    const queuePaint = () => { if (!paintTimer) paintTimer = setTimeout(paintLive, Math.max(0, 250 - (Date.now() - lastPaint))); };
     drawLog();
     const send = async (q) => {
       q = (q || '').trim();
@@ -925,15 +941,18 @@
       if (!AI.getKey()) { toast(t('no_key')); location.hash = '#/settings'; return; }
       state.chat.push({ role: 'user', content: q });
       $('#chatQ').value = '';
-      const ctrl = new AbortController(); state.aiBusy = ctrl; drawLog();
+      $('#chatQ').blur(); // close the phone keyboard so the answer is visible
+      const ctrl = new AbortController(); state.aiBusy = ctrl; state.aiLive = ''; drawLog();
       try {
-        const text = await AI.ask({ messages: state.chat, lang: I18N.lang, days: state.advDays, signal: ctrl.signal, onText: (txt) => { if ($('#chatLog') === log) drawLog(txt); } });
+        const text = await AI.ask({ messages: state.chat, lang: I18N.lang, days: state.advDays, signal: ctrl.signal, onText: (txt) => { state.aiLive = txt; queuePaint(); } });
         state.chat.push({ role: 'assistant', content: text });
       } catch (e) {
-        state.chat.push({ role: 'assistant', content: '⚠️ ' + AI.explainError(e, I18N.lang) });
+        if (state.aiLive && e && e.name === 'APIUserAbortError') state.chat.push({ role: 'assistant', content: state.aiLive });
+        else state.chat.push({ role: 'assistant', content: '⚠️ ' + AI.explainError(e, I18N.lang) });
       }
-      state.aiBusy = null;
-      if ($('#chatLog') === log) drawLog();
+      clearTimeout(paintTimer); paintTimer = null;
+      state.aiBusy = null; state.aiLive = '';
+      if (document.body.contains(log)) drawLog();
     };
     $('#chatForm').onsubmit = (e) => { e.preventDefault(); send($('#chatQ').value); };
     $('#chatQ').onkeydown = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send($('#chatQ').value); } };
@@ -962,9 +981,10 @@
           const prompt = lang === 'ar'
             ? `اكتب ملخصًا تنفيذيًا لتقرير أداء آخر ${days} يومًا لمالك النشاط: (1) ملخص في 3–4 جمل، (2) ما الذي يسير بشكل جيد، (3) المخاطر والمشكلات، (4) أهم 5 توصيات مرتبة بالأولوية مع الأثر المتوقع، (5) أهداف مقترحة للشهر القادم. استخدم عناوين ونقاطًا مختصرة.`
             : `Write the executive summary for a ${days}-day business performance report for the owner: (1) a 3–4 sentence overview, (2) what is going well, (3) risks and problems, (4) the top 5 prioritised recommendations with expected impact, (5) suggested targets for next month. Use short headings and bullets.`;
-          let last = 0;
+          // Rebuilding the whole report iframe while the AI writes is too heavy for phones:
+          // show progress in the status line and rebuild the report once, at the end.
           try {
-            const text = await AI.ask({ messages: [{ role: 'user', content: prompt }], lang, days, onText: (txt) => { aiHTML = AI.md(txt); if (Date.now() - last > 700) { last = Date.now(); draw(); } } });
+            const text = await AI.ask({ messages: [{ role: 'user', content: prompt }], lang, days, onText: (txt) => { const st = $('#repStatus', el); if (st) st.innerHTML = `<span class="typing"><i></i><i></i><i></i></span> ${t('thinking')} · ${txt.length.toLocaleString()}`; } });
             aiHTML = AI.md(text); draw(); $('#repStatus', el).textContent = '✓';
           } catch (e) { $('#repStatus', el).textContent = '⚠️ ' + AI.explainError(e, lang); aiBtn.disabled = false; }
         };

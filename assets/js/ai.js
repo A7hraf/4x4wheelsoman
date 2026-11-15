@@ -130,7 +130,12 @@
 
   // ---------- Claude ----------
   let sdkPromise = null;
-  function loadSDK() { if (!sdkPromise) sdkPromise = import(SDK_URL).then(m => m.default || m.Anthropic).catch(e => { sdkPromise = null; throw e; }); return sdkPromise; }
+  // one retry: a flaky mobile connection often fails the first module download
+  function loadSDK() {
+    if (!sdkPromise) sdkPromise = import(SDK_URL).catch(() => new Promise(r => setTimeout(r, 1200)).then(() => import(SDK_URL)))
+      .then(m => m.default || m.Anthropic).catch(e => { sdkPromise = null; throw e; });
+    return sdkPromise;
+  }
 
   function systemPrompt(lang) {
     return `You are the AI business advisor inside the management dashboard of "${D().settings.name}", an off-road / 4x4 parts and accessories retailer in Oman with a physical shop and an online store.
@@ -144,9 +149,11 @@ Reply in ${lang === 'ar' ? 'Arabic' : 'the same language the owner writes in (Ar
     const apiKey = getKey();
     if (!apiKey) throw new Error('NO_KEY');
     const Anthropic = await loadSDK();
-    const client = new Anthropic({ apiKey, dangerouslyAllowBrowser: true });
+    const client = new Anthropic({ apiKey, dangerouslyAllowBrowser: true, maxRetries: 2 });
     const snap = snapshot(days || 30);
-    const convo = messages.slice();
+    // keep requests small on phones: the last 10 messages, starting with a question
+    let convo = messages.slice(-10);
+    while (convo.length && convo[0].role !== 'user') convo = convo.slice(1);
     convo[0] = { role: 'user', content: `Business snapshot (JSON):\n${JSON.stringify(snap)}\n\n${convo[0].content}` };
     const stream = client.beta.messages.stream({
       model: MODEL,
@@ -156,7 +163,7 @@ Reply in ${lang === 'ar' ? 'Arabic' : 'the same language the owner writes in (Ar
       output_config: { effort: 'medium' },
       system: systemPrompt(lang),
       messages: convo
-    }, { signal });
+    }, { signal, timeout: 180000, maxRetries: 2 });
     if (onText) stream.on('text', (_d, snapshotText) => onText(snapshotText));
     const final = await stream.finalMessage();
     if (final.stop_reason === 'refusal') throw new Error('REFUSAL');
@@ -172,7 +179,8 @@ Reply in ${lang === 'ar' ? 'Arabic' : 'the same language the owner writes in (Ar
     if (e && e.status === 429) return ar ? 'تم تجاوز حد الاستخدام مؤقتًا. حاول بعد قليل.' : 'Rate limit reached. Please try again in a minute.';
     if (e && e.status >= 500) return ar ? 'خدمة Claude غير متاحة مؤقتًا. حاول لاحقًا.' : 'Claude is temporarily unavailable. Please retry shortly.';
     if (e && e.name === 'APIUserAbortError') return ar ? 'تم الإيقاف.' : 'Stopped.';
-    if (/import|fetch|network|Failed/i.test(msg)) return ar ? 'تعذر الاتصال. تحقق من الإنترنت.' : 'Could not reach the AI service. Check your internet connection.';
+    if (e && (e.name === 'APIConnectionTimeoutError' || /timed? ?out/i.test(msg))) return ar ? 'استغرق الرد وقتاً طويلاً. حاول مرة أخرى.' : 'The answer took too long. Please try again.';
+    if (/import|fetch|network|Failed|Load failed/i.test(msg)) return ar ? 'تعذر الاتصال. تحقق من الإنترنت.' : 'Could not reach the AI service. Check your internet connection.';
     return msg;
   }
 

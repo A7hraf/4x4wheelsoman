@@ -32,8 +32,27 @@
       <g transform="translate(100 104) scale(.78) translate(-100 -100)">${(SHAPES[cat] || SHAPES.accessories)(accent)}</g></svg>`;
   }
   // shrink an uploaded image to a small JPEG data URL so it fits in browser storage
-  function shrinkImage(file, max) {
+  function toJpeg(src, w, h) {
+    const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+    const ctx = cv.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, w, h); ctx.drawImage(src, 0, 0, w, h);
+    const out = cv.toDataURL('image/jpeg', 0.82); cv.width = cv.height = 0; // free canvas memory right away (iOS)
+    return out;
+  }
+  async function shrinkImage(file, max) {
     max = max || 640;
+    // Phones: decode the camera photo already downsized, instead of a full 12+ MP image in memory
+    if (global.createImageBitmap) {
+      try {
+        const probe = await createImageBitmap(file, { resizeWidth: 64, resizeQuality: 'low' });
+        const landscape = probe.width >= probe.height; probe.close && probe.close();
+        const bmp = await createImageBitmap(file, landscape ? { resizeWidth: max, resizeQuality: 'high' } : { resizeHeight: max, resizeQuality: 'high' });
+        const out = toJpeg(bmp, bmp.width, bmp.height); bmp.close && bmp.close();
+        return out;
+      } catch (e) { /* fall back below */ }
+    }
+    return shrinkImageLegacy(file, max);
+  }
+  function shrinkImageLegacy(file, max) {
     return new Promise((resolve, reject) => {
       const rd = new FileReader();
       rd.onerror = reject;
@@ -42,9 +61,7 @@
         img.onerror = reject;
         img.onload = () => {
           const k = Math.min(1, max / Math.max(img.width, img.height));
-          const cv = document.createElement('canvas'); cv.width = Math.round(img.width * k); cv.height = Math.round(img.height * k);
-          const ctx = cv.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, cv.width, cv.height); ctx.drawImage(img, 0, 0, cv.width, cv.height);
-          resolve(cv.toDataURL('image/jpeg', 0.82));
+          resolve(toJpeg(img, Math.round(img.width * k), Math.round(img.height * k)));
         };
         img.src = rd.result;
       };
