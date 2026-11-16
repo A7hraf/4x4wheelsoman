@@ -14,6 +14,10 @@
     erase_all: 'Erase all data on this device', erase_q: 'This deletes every order, customer, product change and key stored on this device. Download a backup first. Type ERASE to continue:',
     ai_write: 'Write with AI', ai_writing: 'Writing…', ai_done: 'Filled in — check it before saving', ai_reading: 'Reading the message…', ai_read: 'Read with AI', looking_up: 'Looking up',
     t_search_products: 'products', t_customer_history: 'customer history', t_find_orders: 'orders', t_sales_breakdown: 'sales breakdown', t_reorder_plan: 'reorder plan', t_open_quotes: 'open quotes',
+    cc_title: 'AI command centre', cc_ask: 'Ask anything about your business…', cc_go: 'Ask', todo: "Today's to-do", todo_none: 'All clear — nothing waiting.', cc_ai_off: 'AI is off. Add your Claude API key to ask questions, read WhatsApp messages and write product text.', cc_turn_on: 'Turn on AI',
+    td_new: 'new online orders to confirm', td_quotes: 'quote requests waiting for a price', td_sent: 'quotes sent, no answer for 2+ days', td_qpay: 'Qpay payments waiting', td_unpaid: 'unpaid orders', td_reorder: 'items will run out before new stock arrives', td_low: 'items out of stock',
+    open: 'Open', make_po: 'Create PO', follow_up: 'Follow up', insights_t: 'AI insights', health: 'Business health', more_ins: 'All insights',
+    cc_chips: ['What should I focus on this week?', 'Which products should I reorder now?', 'Who are my best customers this month?', 'Why did sales change vs last month?'],
     lead_days: 'Supplier lead time (days)', cover_days: 'Stock to cover (days)', per_week: '/ week', days_left: 'days left', on_order: 'on order', urgent: 'Urgent', reorder_how: 'Based on sales over the last 60 days, supplier lead time and open purchase orders.'
   });
   I18N.add('ar', {
@@ -22,6 +26,10 @@
     erase_all: 'حذف كل البيانات على هذا الجهاز', erase_q: 'سيتم حذف كل الطلبات والعملاء وتعديلات المنتجات والمفاتيح على هذا الجهاز. نزّل نسخة احتياطية أولاً. اكتب ERASE للمتابعة:',
     ai_write: 'اكتب بالذكاء الاصطناعي', ai_writing: 'جارٍ الكتابة…', ai_done: 'تمت التعبئة — راجعها قبل الحفظ', ai_reading: 'جارٍ قراءة الرسالة…', ai_read: 'اقرأ بالذكاء الاصطناعي', looking_up: 'جارٍ البحث في',
     t_search_products: 'المنتجات', t_customer_history: 'سجل العميل', t_find_orders: 'الطلبات', t_sales_breakdown: 'تفاصيل المبيعات', t_reorder_plan: 'خطة إعادة الطلب', t_open_quotes: 'عروض الأسعار المفتوحة',
+    cc_title: 'مركز الذكاء الاصطناعي', cc_ask: 'اسأل أي شيء عن عملك…', cc_go: 'اسأل', todo: 'مهام اليوم', todo_none: 'لا يوجد شيء بانتظارك.', cc_ai_off: 'الذكاء الاصطناعي متوقف. أضف مفتاح Claude لتسأل عن عملك وتقرأ رسائل واتساب وتكتب وصف المنتجات.', cc_turn_on: 'تفعيل الذكاء الاصطناعي',
+    td_new: 'طلبات إلكترونية جديدة بانتظار التأكيد', td_quotes: 'طلبات عروض أسعار بانتظار التسعير', td_sent: 'عروض أسعار أُرسلت دون رد منذ يومين+', td_qpay: 'دفعات Qpay بانتظار الإجراء', td_unpaid: 'طلبات غير مدفوعة', td_reorder: 'منتجات ستنفد قبل وصول مخزون جديد', td_low: 'منتجات نفدت من المخزون',
+    open: 'فتح', make_po: 'إنشاء أمر شراء', follow_up: 'متابعة', insights_t: 'رؤى الذكاء الاصطناعي', health: 'صحة العمل', more_ins: 'كل الرؤى',
+    cc_chips: ['على ماذا أركز هذا الأسبوع؟', 'ما المنتجات التي يجب أن أعيد طلبها الآن؟', 'من أفضل عملائي هذا الشهر؟', 'لماذا تغيرت المبيعات عن الشهر الماضي؟'],
     lead_days: 'مدة توريد المورد (أيام)', cover_days: 'تغطية المخزون (أيام)', per_week: '/ أسبوع', days_left: 'يوم متبقي', on_order: 'تحت الطلب', urgent: 'عاجل', reorder_how: 'بناءً على مبيعات آخر 60 يوماً ومدة التوريد وأوامر الشراء المفتوحة.'
   });
   I18N.set(D().settings.lang || 'en');
@@ -237,6 +245,39 @@
   // =====================================================
   // DASHBOARD
   // =====================================================
+  // ---------- AI command centre (top of the dashboard) ----------
+  function todoItems() {
+    const now = Date.now(), DAYMS = 864e5, out = [];
+    const sales = D().sales, quotes = D().quotes || [];
+    const add = (n, tone, ic, text, href, btn, extra) => { if (n) out.push({ n, tone, ic, text, href, btn, extra }); };
+    add(sales.filter(s => s.channel === 'online' && s.status === 'new').length, 'brand', 'orders', t('td_new'), '#/orders', t('open'));
+    add(quotes.filter(q => q.status === 'new').length, 'info', 'file', t('td_quotes'), '#/quotes', t('open'));
+    add(quotes.filter(q => q.status === 'sent' && now - (q.sentAt || q.date) > 2 * DAYMS).length, 'violet', 'whatsapp', t('td_sent'), '#/quotes', t('follow_up'));
+    add(sales.filter(s => s.payment === 'qpay' && s.qpay && ['pending', 'requested', 'approved'].includes(s.qpay.status) && DB.countsAsRevenue(s)).length, 'warn', 'card', t('td_qpay'), '#/qpay', t('open'));
+    const unpaid = sales.filter(s => s.paid === false && s.payment !== 'qpay' && DB.countsAsRevenue(s));
+    add(unpaid.length, 'warn', 'wallet', t('td_unpaid'), '#/orders', t('open'), money(unpaid.reduce((a, x) => a + x.total, 0), 0));
+    const plan = AI.reorderPlan();
+    add(plan.filter(r => r.urgent).length, 'bad', 'truck', t('td_reorder'), '#/purchases', t('make_po'), money(plan.filter(r => r.urgent).reduce((a, x) => a + x.cost, 0), 0));
+    return out;
+  }
+  function commandCentre() {
+    const key = !!AI.getKey(), ins = AI.insights(I18N.lang), todo = todoItems();
+    const lv = { good: 'ok', bad: 'bad', warn: 'warn', info: 'info' };
+    return `<section class="cc">
+      <div class="card cc-ask"><div class="card-h"><h3>${icon('sparkle')} ${t('cc_title')}</h3><span class="pill ${key ? 's-delivered' : 's-cancelled'}">${key ? 'Claude · ON' : 'Claude · OFF'}</span></div><div class="card-b">
+        ${key ? `<form id="ccForm" class="cc-form"><input class="input" id="ccQ" placeholder="${esc(t('cc_ask'))}" autocomplete="off"><button class="btn primary" type="submit">${icon('send')}${t('cc_go')}</button></form>
+          <div class="cc-chips">${t('cc_chips').map(c => `<button type="button" class="chip" data-ccq="${esc(c)}">${esc(c)}</button>`).join('')}</div>`
+        : `<div class="cc-off"><p>${t('cc_ai_off')}</p><a class="btn primary" href="#/settings" data-aikey>${icon('sparkle')}${t('cc_turn_on')}</a></div>`}
+        <h4 class="cc-sub">${t('todo')}</h4>
+        <ul class="cc-todo">${todo.map(x => `<li data-tone="${x.tone}"><span class="cc-ic">${icon(x.ic)}</span><b class="num">${x.n}</b><span class="grow">${esc(x.text)}${x.extra ? ` <span class="faint">· ${x.extra}</span>` : ''}</span><a class="btn sm" href="${x.href}">${esc(x.btn)}</a></li>`).join('') || `<li class="cc-none">${icon('check')} ${t('todo_none')}</li>`}</ul>
+      </div></div>
+      <div class="card cc-ins"><div class="card-h"><h3>${t('insights_t')}</h3><a href="#/advisor">${t('more_ins')}</a></div><div class="card-b">
+        <div class="cc-score"><div class="ring sm" style="--v:${ins.score};--c:${ins.score >= 70 ? 'var(--ok)' : ins.score >= 45 ? 'var(--warn)' : 'var(--bad)'}"><b>${ins.score}</b></div><div><b>${t('health')}</b><div class="faint" style="font-size:12.5px">/ 100</div></div></div>
+        <ul class="cc-list">${ins.items.slice(0, 4).map(i => `<li class="lv-${lv[i.level] || 'info'}"><b>${esc(i.title)}</b><span>${esc(i.text)}</span></li>`).join('')}</ul>
+      </div></div>
+    </section>`;
+  }
+
   function viewDashboard(v) {
     const r = range(state.dashRange);
     const all = revenueSales();
@@ -266,7 +307,8 @@
           <a class="btn" href="index.html" target="_blank" rel="noopener">${icon('external')}${t('open_store')}</a>
         </div>
       </section>
-      <div class="page-head" style="margin-bottom:14px"><div></div>${rangeSeg(state.dashRange, 'dseg')}</div>
+      ${commandCentre()}
+      <div class="page-head" style="margin-bottom:14px;margin-top:16px"><div></div>${rangeSeg(state.dashRange, 'dseg')}</div>
       <div class="grid g-kpi">
         ${kpi('finance', 'tone-brand', t('net_sales'), big(S.net), `${delta(S.net, P.net)}<span>${t('vs_prev')}</span>`)}
         ${kpi('reports', 'tone-ok', t('gross_profit'), big(S.gp), `${delta(S.gp, P.gp)}<span>${t('margin')} ${pct(S.gp / S.net * 100)}</span>`)}
@@ -300,6 +342,10 @@
 
     bindSeg('dseg', k => { state.dashRange = k; render(); });
     $('[data-low]', v).onclick = () => { state.invStock = 'low'; };
+    // command centre: questions go to the AI Advisor and are sent there
+    const ask = (q) => { q = (q || '').trim(); if (!q) return; state.pendingQ = q; location.hash = '#/advisor'; };
+    if ($('#ccForm', v)) $('#ccForm', v).onsubmit = (e) => { e.preventDefault(); ask($('#ccQ', v).value); };
+    $$('[data-ccq]', v).forEach(b => b.onclick = () => ask(b.dataset.ccq));
     bindOrderRows(v);
 
     const bk = buckets(r);
@@ -886,6 +932,7 @@
     $$('[data-why]', v).forEach(b => b.onclick = () => send((I18N.lang === 'ar' ? 'اشرح هذه الملاحظة وما الذي يجب أن أفعله: ' : 'Explain this finding and what I should do about it: ') + b.dataset.why));
     if ($('#clrChat')) $('#clrChat').onclick = () => { if (state.aiBusy) state.aiBusy.abort(); state.chat = []; render(); };
     $('#genRep').onclick = () => reportModal(state.advDays);
+    if (state.pendingQ) { const q = state.pendingQ; state.pendingQ = null; send(q); }
   }
 
   function reportModal(days) {

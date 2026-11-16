@@ -388,3 +388,31 @@ test('dashboard works on a phone (no sideways scrolling)', async ({ page }) => {
     expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(0);
   }
 });
+
+test('dashboard command centre: to-do counts match the data and link to the right screens', async ({ page }) => {
+  await setupAdmin(page);
+  const truth = await page.evaluate(() => ({
+    newOrders: DB.data.sales.filter(s => s.channel === 'online' && s.status === 'new').length,
+    newQuotes: DB.data.quotes.filter(q => q.status === 'new').length,
+    urgent: AI.reorderPlan().filter(r => r.urgent).length
+  }));
+  const row = (txt) => page.locator('.cc-todo li', { hasText: txt });
+  if (truth.newOrders) await expect(row('new online orders to confirm').locator('b')).toHaveText(String(truth.newOrders));
+  if (truth.newQuotes) await expect(row('quote requests waiting').locator('b')).toHaveText(String(truth.newQuotes));
+  if (truth.urgent) {
+    await expect(row('run out before new stock').locator('b')).toHaveText(String(truth.urgent));
+    await row('run out before new stock').getByRole('link').click();
+    await expect(page.locator('#pageTitle')).toHaveText('Purchases');
+  }
+  // without an API key the centre offers to turn AI on
+  await go(page, 'dashboard');
+  await expect(page.locator('.cc-ask')).toContainText('Claude · OFF');
+  await page.locator('.cc-off a').click();
+  await expect(page.locator('#pageTitle')).toHaveText('Settings');
+  // a new online order shows up in the to-do right away
+  await page.evaluate(() => { const p = DB.data.products.find(x => x.price > 0); DB.createSale({ channel: 'online', source: 'website', payment: 'transfer', items: [{ pid: p.id, qty: 1 }] }); });
+  await go(page, 'dashboard');
+  await expect(row('new online orders to confirm').locator('b')).toHaveText(String(truth.newOrders + 1));
+  // insights card shows the health score
+  await expect(page.locator('.cc-score .ring b')).toHaveText(/\d+/);
+});
