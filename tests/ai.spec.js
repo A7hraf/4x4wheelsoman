@@ -163,3 +163,20 @@ test('without an API key the AI buttons explain what to do and send nothing', as
   await expect(page.locator('.notice')).toContainText('Claude API key');
   expect(calls).toHaveLength(0);
 });
+
+test('dashboard: ask a question or tap a suggestion → the AI Advisor answers it', async ({ page, context }) => {
+  const calls = await fakeClaude(context, (body) => ({ blocks: [{ type: 'text', text: 'Focus on **reordering BP-51 kits**.' }] }));
+  await setupAdmin(page);
+  await setApiKey(page);
+  await go(page, 'dashboard');
+  await expect(page.locator('.cc-ask')).toContainText('Claude · ON');
+  await page.locator('#ccQ').fill('What should I do today?');
+  await page.locator('#ccForm button').click();
+  await expect(page.locator('#pageTitle')).toHaveText('AI Advisor');
+  await expect(page.locator('.msg.user').last()).toHaveText('What should I do today?');
+  await expect(page.locator('.msg.assistant').last()).toContainText('reordering BP-51 kits', { timeout: 20000 });
+  await go(page, 'dashboard');
+  await page.locator('[data-ccq]').first().click();
+  await expect(page.locator('.msg.user').last()).toHaveText('What should I focus on this week?');
+  await expect.poll(() => calls.length).toBe(2);
+});
