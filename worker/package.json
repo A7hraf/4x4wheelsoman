@@ -1,0 +1,7 @@
+{
+  "name": "4x4wheelsoman-assistant-proxy",
+  "private": true,
+  "type": "module",
+  "main": "assistant-proxy.js",
+  "scripts": { "deploy": "wrangler deploy" }
+}

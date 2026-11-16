@@ -12,7 +12,8 @@
 
   // Preview mode: the owner can see unpublished admin changes with ?preview
   let PRODUCTS = C.products;
-  if (/[?&]preview\b/.test(location.search)) { const db = store.get('x4w_db_v2', null); if (db && db.products) PRODUCTS = db.products; }
+  // (the admin writes a public copy of the catalog when you click "Preview website"; the admin database itself is encrypted)
+  if (/[?&]preview\b/.test(location.search)) { const pv = store.get('x4w_preview', null) || store.get('x4w_db_v2', null); if (pv && Array.isArray(pv.products)) PRODUCTS = pv.products; }
   PRODUCTS = PRODUCTS.filter(p => p.active !== false && p.online !== false);
 
   let lang = store.get('x4w_lang', null) || (navigator.language || '').startsWith('ar') && 'ar' || 'en';
@@ -370,7 +371,7 @@
   function refreshFinder() { const f = $('#finder'); if (!f) return; f.outerHTML = finderHTML('finder'); bindFinder(); }
 
   function bind(p) {
-    $$('#langBtn, [data-lang]').forEach(b => b.onclick = () => { lang = lang === 'ar' ? 'en' : 'ar'; store.set('x4w_lang', lang); setDir(); render(true); });
+    $$('#langBtn, [data-lang]').forEach(b => b.onclick = () => { lang = lang === 'ar' ? 'en' : 'ar'; store.set('x4w_lang', lang); setDir(); render(true); if (window.STORE && STORE.onLang) STORE.onLang(lang); });
     $('#burger').onclick = () => {
       const m = document.createElement('div'); m.className = 'mnav';
       m.innerHTML = `<div class="top"><img src="assets/img/site/logo-mark.png" alt=""><button class="icon-btn" aria-label="${t('close')}">${icon('x')}</button></div>
@@ -378,7 +379,7 @@
         <a class="btn red" href="${wa(t('wa_q'))}" target="_blank" rel="noopener">${WA}${t('chat_wa')}</a><button class="btn" data-lang style="margin-top:10px">${lang === 'ar' ? 'English' : 'العربية'}</button>`;
       document.body.appendChild(m); document.body.style.overflow = 'hidden';
       const close = () => { m.remove(); document.body.style.overflow = ''; };
-      m.onclick = (e) => { if (e.target.closest('a') || e.target.closest('.icon-btn')) close(); if (e.target.closest('[data-lang]')) { close(); lang = lang === 'ar' ? 'en' : 'ar'; store.set('x4w_lang', lang); setDir(); render(true); } };
+      m.onclick = (e) => { if (e.target.closest('a') || e.target.closest('.icon-btn')) close(); if (e.target.closest('[data-lang]')) { close(); lang = lang === 'ar' ? 'en' : 'ar'; store.set('x4w_lang', lang); setDir(); render(true); if (window.STORE && STORE.onLang) STORE.onLang(lang); } };
     };
     $$('[data-add]').forEach(b => b.onclick = (e) => { e.preventDefault(); addQuote(b.dataset.add, 1); b.innerHTML = icon('check'); });
     bindFinder();
@@ -443,6 +444,14 @@
     }
   }
 
+  // small API for the parts assistant (assets/js/assistant.js)
+  window.STORE = {
+    get lang() { return lang; }, S, C, products: () => PRODUCTS, t, esc, money, wa, img, veh, vehName, makeName, catName, hasPrice, L, prodBy,
+    addQuote: (slug, qty) => { addQuote(slug, qty); if (route.name === 'quote') render(true); },
+    inQuote: (slug) => quote.some(l => l.slug === slug),
+    savedVehicle: () => store.get('x4w_vehicle', {}), saveVehicle: (v) => { const vv = store.get('x4w_vehicle', {}); Object.assign(vv, v); store.set('x4w_vehicle', vv); },
+    onLang: null
+  };
   window.addEventListener('hashchange', () => { const m = $('.mnav'); if (m) { m.remove(); document.body.style.overflow = ''; } render(); });
   render();
 })();

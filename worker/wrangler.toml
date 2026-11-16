@@ -1,0 +1,20 @@
+# Cloudflare Worker for the store's AI parts assistant. See README.md in this folder.
+name = "x4w-assistant"
+main = "assistant-proxy.js"
+compatibility_date = "2026-11-01"
+
+[vars]
+ALLOWED_ORIGINS = "https://a7hraf.github.io"
+CATALOG_URL = "https://a7hraf.github.io/4x4wheelsoman/assets/js/catalog.js"
+MODEL = "claude-haiku-5-5"
+
+# Per-visitor rate limit (recommended): 20 requests per 60 s
+[[ratelimits]]
+name = "RATE_LIMITER"
+namespace_id = "1001"
+
+  [ratelimits.simple]
+  limit = 20
+  period = 60
+
+# The API key is a secret — set it with:  npx wrangler secret put ANTHROPIC_API_KEY
