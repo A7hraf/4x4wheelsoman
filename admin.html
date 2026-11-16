@@ -17,21 +17,27 @@
 </head>
 <body>
   <div class="app" id="app">
-    <aside class="side" id="side"></aside>
+    <aside class="side" id="side" aria-label="Main menu"></aside>
     <div class="scrim" id="scrim"></div>
     <div class="main">
       <header class="topbar">
         <button class="icon-btn menu-btn" id="menuBtn" aria-label="Menu"></button>
+        <a class="top-logo" href="#/dashboard" aria-label="Dashboard"><img src="assets/img/site/logo-mark.png" alt=""></a>
         <h1 id="pageTitle">Dashboard</h1>
         <div class="spacer"></div>
         <div class="gsearch" id="gsearch"></div>
-        <button class="icon-btn" id="langBtn" title="English / العربية"></button>
-        <button class="icon-btn" id="themeBtn" title="Theme"></button>
-        <button class="icon-btn" id="lockBtn" title="Lock" aria-label="Lock"></button>
-        <div class="avatar hide-sm" id="avatar">4W</div>
+        <button class="icon-btn search-btn" id="searchBtn" aria-label="Search"></button>
+        <button class="icon-btn hide-phone" id="langBtn" title="English / العربية"></button>
+        <button class="icon-btn hide-phone" id="themeBtn" title="Theme"></button>
+        <button class="btn signout" id="lockBtn" type="button"></button>
+        <button class="avatar" id="avatar" type="button" aria-haspopup="menu" aria-label="Account">4W</button>
+        <div class="acct-menu hide" id="acctMenu" role="menu"></div>
       </header>
       <main class="content" id="view"></main>
     </div>
+    <nav class="tabbar" id="tabbar" aria-label="Main menu"></nav>
+    <div class="sheet-scrim hide" id="moreScrim"></div>
+    <section class="more-sheet" id="moreSheet" aria-label="More" aria-hidden="true"></section>
   </div>
 
   <script src="assets/vendor/chart.umd.js"></script>

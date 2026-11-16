@@ -134,7 +134,7 @@
     }
     function publishCard() {
       const g = S().github, tok = getToken();
-      return `<div class="card mt"><div class="card-h"><h3>${icon('external')} ${t('publish')}</h3>${S().lastPublished ? `<span class="faint" style="font-size:12px">${fDT(S().lastPublished)}</span>` : ''}</div><div class="card-b">
+      return `<div id="set-pub" class="card mt"><div class="card-h"><h3>${icon('external')} ${t('publish')}</h3>${S().lastPublished ? `<span class="faint" style="font-size:12px">${fDT(S().lastPublished)}</span>` : ''}</div><div class="card-b">
         <p class="muted" style="margin:0 0 10px">${t('publish_sub')}</p>
         <div class="form-grid"><div class="field"><label>Owner / repo</label><input class="input" id="gh_repo" value="${esc(g.owner + '/' + g.repo)}"></div><div class="field"><label>Branch</label><input class="input" id="gh_branch" value="${esc(g.branch)}"></div>
           <div class="field full"><label>${t('gh_token')}</label><input class="input" id="gh_tok" type="password" autocomplete="off" placeholder="${tok ? '•••••••• ' + esc(tok.slice(-4)) : 'github_pat_…'}"></div></div>

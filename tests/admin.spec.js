@@ -416,3 +416,81 @@ test('dashboard command centre: to-do counts match the data and link to the righ
   // insights card shows the health score
   await expect(page.locator('.cc-score .ring b')).toHaveText(/\d+/);
 });
+
+// ---------- navigation & sign out on every screen size ----------
+test('desktop: grouped sidebar, Sign out in the top bar, sidebar and account menu', async ({ page }) => {
+  await setupAdmin(page);
+  const groups = await page.locator('#side .nav-group').allTextContents();
+  expect(groups.map(g => g.trim())).toEqual(['Sell', 'Stock', 'Money', 'Marketing & AI']);
+  await expect(page.locator('#lockBtn')).toHaveText('Sign out');
+  await expect(page.locator('#ucSignout')).toBeVisible();
+  await page.locator('#avatar').click();
+  await expect(page.locator('#acctMenu')).toBeVisible();
+  await page.locator('#acctMenu [data-am="out"]').click();
+  await expect(page.locator('.auth h1')).toHaveText('Sign in');
+});
+
+test('tablet: icon rail with labels, Sign out at the bottom, rows shown as cards', async ({ browser }) => {
+  const ctx = await browser.newContext({ viewport: { width: 820, height: 1180 }, hasTouch: true });
+  await offline(ctx);
+  const page = await ctx.newPage();
+  await setupAdmin(page);
+  const side = await page.locator('#side').boundingBox();
+  expect(side.width).toBeLessThan(100);
+  await expect(page.locator('#side .nav a', { hasText: 'Inventory' })).toBeVisible();
+  await expect(page.locator('#sideSignout')).toBeVisible();
+  await go(page, 'orders');
+  await expect(page.locator('table.t-cards thead')).toBeHidden();
+  expect(await page.locator('table.t-cards td[data-label="Customer"]').count()).toBeGreaterThan(0);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(0);
+  await page.locator('#sideSignout').click();
+  await expect(page.locator('.auth h1')).toHaveText('Sign in');
+  await ctx.close();
+});
+
+test('phone: bottom tab bar, More menu with every screen, Sign out in two places', async ({ browser }) => {
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+  await offline(ctx);
+  const page = await ctx.newPage();
+  await setupAdmin(page);
+  await expect(page.locator('#side')).toBeHidden();
+  await expect(page.locator('#tabbar a')).toHaveText([/Home/, /Sell/, /Orders/, /Quotes/]);
+  await expect(page.locator('#lockBtn')).toBeVisible();
+  await expect(page.locator('#lockBtn')).toContainText('Sign out');
+  await page.locator('#tabbar a', { hasText: 'Sell' }).click();
+  await expect(page.locator('#pageTitle')).toHaveText('Point of Sale');
+  await page.locator('#moreBtn').click();
+  await expect(page.locator('#moreSheet')).toBeVisible();
+  for (const name of ['Customers', 'Inventory', 'Purchases', 'Qpay', 'Finance', 'Reports', 'WhatsApp', 'AI Advisor', 'Settings']) await expect(page.locator('.ms-grid a', { hasText: name })).toBeVisible();
+  await page.locator('.ms-grid a', { hasText: 'Inventory' }).click();
+  await expect(page.locator('#pageTitle')).toHaveText('Inventory');
+  await expect(page.locator('#moreSheet')).toBeHidden();
+  // long lists show 30 at a time
+  await expect(page.locator('#view tbody tr')).toHaveCount(30);
+  await page.locator('[data-more="inv"]').click();
+  expect(await page.locator('#view tbody tr').count()).toBeGreaterThan(30);
+  // phone search
+  await page.locator('#searchBtn').click();
+  await page.locator('#gq').fill('Ahmed');
+  await expect(page.locator('#gres')).toContainText('Ahmed');
+  // sign out from the More menu
+  await page.locator('#moreBtn').click();
+  await page.locator('#msSignout').click();
+  await expect(page.locator('.auth h1')).toHaveText('Sign in');
+  await ctx.close();
+});
+
+test('every screen fits phones and tablets without sideways scrolling', async ({ browser }) => {
+  for (const vp of [{ width: 360, height: 760 }, { width: 390, height: 844 }, { width: 768, height: 1024 }, { width: 1024, height: 768 }]) {
+    const ctx = await browser.newContext({ viewport: vp, hasTouch: true, isMobile: vp.width < 700 });
+    await offline(ctx);
+    const page = await ctx.newPage();
+    await setupAdmin(page);
+    for (const r of ['dashboard', 'pos', 'quotes', 'orders', 'inventory', 'purchases', 'whatsapp', 'advisor', 'qpay', 'finance', 'reports', 'customers', 'settings']) {
+      await go(page, r);
+      await expect(page.locator('#view > *:visible').first()).toBeVisible();
+      expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth), `${r} @${vp.width}`).toBeLessThanOrEqual(0);
+    }
+    await ctx.close();
+  }
+});

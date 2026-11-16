@@ -14,6 +14,7 @@
     erase_all: 'Erase all data on this device', erase_q: 'This deletes every order, customer, product change and key stored on this device. Download a backup first. Type ERASE to continue:',
     ai_write: 'Write with AI', ai_writing: 'Writing…', ai_done: 'Filled in — check it before saving', ai_reading: 'Reading the message…', ai_read: 'Read with AI', looking_up: 'Looking up',
     t_search_products: 'products', t_customer_history: 'customer history', t_find_orders: 'orders', t_sales_breakdown: 'sales breakdown', t_reorder_plan: 'reorder plan', t_open_quotes: 'open quotes',
+    show_more: 'Show more', sign_out: 'Sign out', more: 'More', home: 'Home', tab_sell: 'Sell', tab_orders: 'Orders', grp_sell: 'Sell', grp_stock: 'Stock', grp_grow: 'Marketing & AI', grp_set: 'Shop', account: 'Account', theme_t: 'Dark / light', lang_t: 'العربية', locks_after: 'Locks after {m} min idle', so_note: 'Signing out locks the dashboard. Your data stays encrypted on this device.',
     cc_title: 'AI command centre', cc_ask: 'Ask anything about your business…', cc_go: 'Ask', todo: "Today's to-do", todo_none: 'All clear — nothing waiting.', cc_ai_off: 'AI is off. Add your Claude API key to ask questions, read WhatsApp messages and write product text.', cc_turn_on: 'Turn on AI',
     td_new: 'new online orders to confirm', td_quotes: 'quote requests waiting for a price', td_sent: 'quotes sent, no answer for 2+ days', td_qpay: 'Qpay payments waiting', td_unpaid: 'unpaid orders', td_reorder: 'items will run out before new stock arrives', td_low: 'items out of stock',
     open: 'Open', make_po: 'Create PO', follow_up: 'Follow up', insights_t: 'AI insights', health: 'Business health', more_ins: 'All insights',
@@ -26,6 +27,7 @@
     erase_all: 'حذف كل البيانات على هذا الجهاز', erase_q: 'سيتم حذف كل الطلبات والعملاء وتعديلات المنتجات والمفاتيح على هذا الجهاز. نزّل نسخة احتياطية أولاً. اكتب ERASE للمتابعة:',
     ai_write: 'اكتب بالذكاء الاصطناعي', ai_writing: 'جارٍ الكتابة…', ai_done: 'تمت التعبئة — راجعها قبل الحفظ', ai_reading: 'جارٍ قراءة الرسالة…', ai_read: 'اقرأ بالذكاء الاصطناعي', looking_up: 'جارٍ البحث في',
     t_search_products: 'المنتجات', t_customer_history: 'سجل العميل', t_find_orders: 'الطلبات', t_sales_breakdown: 'تفاصيل المبيعات', t_reorder_plan: 'خطة إعادة الطلب', t_open_quotes: 'عروض الأسعار المفتوحة',
+    show_more: 'عرض المزيد', sign_out: 'تسجيل الخروج', more: 'المزيد', home: 'الرئيسية', tab_sell: 'البيع', tab_orders: 'الطلبات', grp_sell: 'المبيعات', grp_stock: 'المخزون', grp_grow: 'التسويق والذكاء', grp_set: 'المتجر', account: 'الحساب', theme_t: 'داكن / فاتح', lang_t: 'English', locks_after: 'يُقفل بعد {m} دقيقة من عدم الاستخدام', so_note: 'تسجيل الخروج يقفل اللوحة. تبقى بياناتك مشفّرة على هذا الجهاز.',
     cc_title: 'مركز الذكاء الاصطناعي', cc_ask: 'اسأل أي شيء عن عملك…', cc_go: 'اسأل', todo: 'مهام اليوم', todo_none: 'لا يوجد شيء بانتظارك.', cc_ai_off: 'الذكاء الاصطناعي متوقف. أضف مفتاح Claude لتسأل عن عملك وتقرأ رسائل واتساب وتكتب وصف المنتجات.', cc_turn_on: 'تفعيل الذكاء الاصطناعي',
     td_new: 'طلبات إلكترونية جديدة بانتظار التأكيد', td_quotes: 'طلبات عروض أسعار بانتظار التسعير', td_sent: 'عروض أسعار أُرسلت دون رد منذ يومين+', td_qpay: 'دفعات Qpay بانتظار الإجراء', td_unpaid: 'طلبات غير مدفوعة', td_reorder: 'منتجات ستنفد قبل وصول مخزون جديد', td_low: 'منتجات نفدت من المخزون',
     open: 'فتح', make_po: 'إنشاء أمر شراء', follow_up: 'متابعة', insights_t: 'رؤى الذكاء الاصطناعي', health: 'صحة العمل', more_ins: 'كل الرؤى',
@@ -159,46 +161,100 @@
   }
 
   // ---------------- shell ----------------
+  // Menu groups: Sell · Stock · Money · Marketing & AI · Shop
   const ROUTES = [
-    { id: 'dashboard', icon: 'dashboard', grp: 'grp_ops' },
-    { id: 'pos', icon: 'pos', grp: 'grp_ops' },
-    { id: 'quotes', icon: 'file', grp: 'grp_ops', badge: () => (D().quotes || []).filter(q => q.status === 'new').length },
-    { id: 'orders', icon: 'orders', grp: 'grp_ops', badge: () => D().sales.filter(s => s.channel === 'online' && s.status === 'new').length },
-    { id: 'inventory', icon: 'inventory', grp: 'grp_ops', badge: () => D().products.filter(p => p.active !== false && p.stock <= p.reorder).length },
-    { id: 'purchases', icon: 'purchases', grp: 'grp_ops' },
-    { id: 'whatsapp', icon: 'megaphone', grp: 'grp_ai' },
-    { id: 'advisor', icon: 'sparkle', grp: 'grp_ai' },
-    { id: 'qpay', icon: 'card', grp: 'grp_money', badge: () => D().sales.filter(x => x.payment === 'qpay' && x.qpay && x.qpay.status === 'pending' && x.status !== 'cancelled').length },
+    { id: 'dashboard', icon: 'dashboard', grp: '' },
+    { id: 'pos', icon: 'pos', grp: 'grp_sell' },
+    { id: 'orders', icon: 'orders', grp: 'grp_sell', badge: () => D().sales.filter(s => s.channel === 'online' && s.status === 'new').length },
+    { id: 'quotes', icon: 'file', grp: 'grp_sell', badge: () => (D().quotes || []).filter(q => q.status === 'new').length },
+    { id: 'customers', icon: 'customers', grp: 'grp_sell' },
+    { id: 'inventory', icon: 'inventory', grp: 'grp_stock', badge: () => D().products.filter(p => p.active !== false && p.stock <= p.reorder).length, tone: 'warn' },
+    { id: 'purchases', icon: 'purchases', grp: 'grp_stock', badge: () => AI.reorderPlan().filter(r => r.urgent).length, tone: 'warn' },
+    { id: 'qpay', icon: 'card', grp: 'grp_money', badge: () => D().sales.filter(x => x.payment === 'qpay' && x.qpay && ['pending', 'requested'].includes(x.qpay.status) && x.status !== 'cancelled').length },
     { id: 'finance', icon: 'finance', grp: 'grp_money' },
     { id: 'reports', icon: 'reports', grp: 'grp_money' },
-    { id: 'customers', icon: 'customers', grp: 'grp_admin' },
-    { id: 'settings', icon: 'settings', grp: 'grp_admin' }
+    { id: 'whatsapp', icon: 'whatsapp', grp: 'grp_grow' },
+    { id: 'advisor', icon: 'sparkle', grp: 'grp_grow' },
+    { id: 'settings', icon: 'settings', grp: 'grp_set' }
   ];
+  // phone bottom bar: the four most used screens + More
+  const TABS = [['dashboard', 'home'], ['pos', 'tab_sell'], ['orders', 'tab_orders'], ['quotes', 'quotes']];
   let route = 'dashboard';
-  const state = { dashRange: '30', finRange: 'month', repRange: '30', orderTab: 'online', orderStatus: 'all', orderQ: '', orderSrc: 'all', invQ: '', invCat: 'all', invStock: 'all', invTab: 'products', custQ: '', advDays: 30, chat: [], aiBusy: null, cart: [], posCat: 'all', posQ: '', posPay: 'cash', posDisc: 0, posCust: '' };
+  // long lists show 30 rows, then "Show more"
+  const PAGE = 30;
+  const moreBtn = (key, total) => { const n = state.lim[key] || PAGE; return total > n ? `<div class="more-row"><button class="btn" data-more="${key}">${t('show_more')} · ${total - n}</button></div>` : ''; };
+  const bindMore = (v) => $$('[data-more]', v).forEach(b => b.onclick = () => { state.lim[b.dataset.more] = (state.lim[b.dataset.more] || PAGE) + PAGE * 2; const y = scrollY; render(); scrollTo(0, y); });
+  const state = { lim: {}, dashRange: '30', finRange: 'month', repRange: '30', orderTab: 'online', orderStatus: 'all', orderQ: '', orderSrc: 'all', invQ: '', invCat: 'all', invStock: 'all', invTab: 'products', custQ: '', advDays: 30, chat: [], aiBusy: null, cart: [], posCat: 'all', posQ: '', posPay: 'cash', posDisc: 0, posCust: '' };
 
+  function signOut() { if (window.Auth) Auth.lock(); }
   function renderShell() {
     const s = D().settings;
     const initials = (s.name || 'BH').split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase();
+    const badges = {}; ROUTES.forEach(r => { badges[r.id] = r.badge ? r.badge() : 0; });
+    const link = (r, cls) => `<a href="#/${r.id}" class="${cls || ''} ${route === r.id ? 'active' : ''}" ${route === r.id ? 'aria-current="page"' : ''} title="${esc(t(r.id))}"><span class="ni">${icon(r.icon)}${badges[r.id] ? `<span class="badge ${r.tone || ''}">${badges[r.id] > 99 ? '99+' : badges[r.id]}</span>` : ''}</span><span class="nl">${t(r.id)}</span></a>`;
+    // ---- sidebar (desktop: full, tablet: icon rail with labels)
     let html = `<a class="logo" href="#/dashboard"><img src="assets/img/site/logo-mark.png" alt="" class="logo-img"><div><b>${esc(s.name)}</b><small>Business Hub</small></div></a><nav class="nav">`;
-    let grp = '';
-    ROUTES.forEach(r => {
-      if (r.grp !== grp) { grp = r.grp; html += `<div class="nav-group">${t(grp)}</div>`; }
-      const b = r.badge ? r.badge() : 0;
-      html += `<a href="#/${r.id}" class="${route === r.id ? 'active' : ''}">${icon(r.icon)}<span>${t(r.id)}</span>${b ? `<span class="badge">${b}</span>` : ''}</a>`;
+    let grp = null;
+    ROUTES.filter(r => r.id !== 'settings').forEach(r => {
+      if (r.grp !== grp) { grp = r.grp; html += grp ? `<div class="nav-group"><span>${t(grp)}</span></div>` : ''; }
+      html += link(r);
     });
-    html += `</nav><div class="side-foot"><a class="store-link" href="index.html" target="_blank" rel="noopener">${icon('store')}<div>${t('storefront')}<small>${t('open_store')} ↗</small></div></a></div>`;
+    html += `</nav><div class="side-foot">
+      ${link(ROUTES.find(r => r.id === 'settings'))}
+      <a class="nav-store" href="index.html" target="_blank" rel="noopener" title="${esc(t('storefront'))}"><span class="ni">${icon('store')}</span><span class="nl">${t('storefront')} ↗</span></a>
+      <div class="user-card"><span class="avatar">${esc(initials)}</span><div class="uc-txt"><b>${esc(s.name)}</b><small>${esc(t('locks_after').replace('{m}', s.autoLockMin || 15))}</small></div><button class="uc-out" id="ucSignout" type="button" title="${esc(t('sign_out'))}">${icon('logout')}<span>${t('sign_out')}</span></button></div>
+      <button class="side-signout" id="sideSignout" type="button" title="${esc(t('sign_out'))}">${icon('logout')}<span>${t('sign_out')}</span></button>
+    </div>`;
     $('#side').innerHTML = html;
+    // ---- phone: bottom tab bar + More sheet
+    const moreActive = !TABS.some(([id]) => id === route);
+    const moreBadge = ROUTES.filter(r => !TABS.some(([id]) => id === r.id)).reduce((a, r) => a + (badges[r.id] || 0), 0);
+    $('#tabbar').innerHTML = TABS.map(([id, label]) => { const r = ROUTES.find(x => x.id === id); return `<a href="#/${id}" class="${route === id ? 'active' : ''}"><span class="ni">${icon(r.icon)}${badges[id] ? `<span class="badge">${badges[id]}</span>` : ''}</span><span>${t(label)}</span></a>`; }).join('')
+      + `<button type="button" id="moreBtn" class="${moreActive ? 'active' : ''}" aria-expanded="false"><span class="ni">${icon('grid')}${moreBadge ? `<span class="badge dot"></span>` : ''}</span><span>${t('more')}</span></button>`;
+    const groups = []; ROUTES.forEach(r => { if (TABS.some(([id]) => id === r.id)) return; let g = groups.find(x => x.k === r.grp); if (!g) groups.push(g = { k: r.grp, items: [] }); g.items.push(r); });
+    $('#moreSheet').innerHTML = `<div class="ms-grab"></div>
+      <div class="ms-head"><span class="avatar">${esc(initials)}</span><div><b>${esc(s.name)}</b><small>${esc(t('locks_after').replace('{m}', s.autoLockMin || 15))}</small></div></div>
+      ${groups.map(g => `<div class="ms-group"><h4>${t(g.k || 'grp_set')}</h4><div class="ms-grid">${g.items.map(r => `<a href="#/${r.id}" class="${route === r.id ? 'active' : ''}"><span class="ni">${icon(r.icon)}${badges[r.id] ? `<span class="badge ${r.tone || ''}">${badges[r.id]}</span>` : ''}</span><span>${t(r.id)}</span></a>`).join('')}</div></div>`).join('')}
+      <div class="ms-row"><a class="btn" href="index.html" target="_blank" rel="noopener">${icon('store')}${t('storefront')}</a><button class="btn" type="button" id="msLang">${icon('globe2')}${t('lang_t')}</button><button class="btn" type="button" id="msTheme">${icon('moon')}${t('theme_t')}</button></div>
+      <button class="btn danger-solid block" type="button" id="msSignout">${icon('logout')}${t('sign_out')}</button>
+      <p class="ms-note">${t('so_note')}</p>`;
+    // ---- top bar
     $('#menuBtn').innerHTML = icon('menu');
+    $('#searchBtn').innerHTML = icon('search');
     $('#langBtn').innerHTML = `<span style="font-weight:700;font-size:12px">${I18N.lang === 'ar' ? 'EN' : 'ع'}</span>`;
     $('#themeBtn').innerHTML = icon(document.documentElement.dataset.theme === 'dark' || (!document.documentElement.dataset.theme && matchMedia('(prefers-color-scheme: dark)').matches) ? 'sun' : 'moon');
     $('#avatar').textContent = initials;
-    if ($('#lockBtn')) { $('#lockBtn').innerHTML = icon('lock'); $('#lockBtn').title = t('lock_now'); $('#lockBtn').onclick = () => window.Auth && Auth.lock(); }
+    $('#lockBtn').innerHTML = `${icon('logout')}<span>${t('sign_out')}</span>`; $('#lockBtn').title = t('sign_out');
+    $('#acctMenu').innerHTML = `<div class="am-h"><b>${esc(s.name)}</b><small>${esc(t('locks_after').replace('{m}', s.autoLockMin || 15))}</small></div>
+      <a href="#/settings" role="menuitem">${icon('settings')}${t('settings')}</a><a href="index.html" target="_blank" rel="noopener" role="menuitem">${icon('store')}${t('storefront')}</a>
+      <button type="button" role="menuitem" data-am="lang">${icon('globe2')}${t('lang_t')}</button><button type="button" role="menuitem" data-am="theme">${icon('moon')}${t('theme_t')}</button>
+      <button type="button" role="menuitem" class="am-out" data-am="out">${icon('logout')}${t('sign_out')}</button>`;
     $('#pageTitle').textContent = t(route);
     document.title = t(route) + ' · ' + s.name;
     $('#gsearch').innerHTML = `${icon('search')}<input id="gq" placeholder="${t('search')}" autocomplete="off"><div class="gresults hide" id="gres"></div>`;
     bindGlobalSearch();
+    bindShell();
   }
+  function setMore(open) {
+    $('#moreSheet').classList.toggle('open', open); $('#moreScrim').classList.toggle('hide', !open);
+    $('#moreSheet').setAttribute('aria-hidden', open ? 'false' : 'true');
+    const b = $('#moreBtn'); if (b) b.setAttribute('aria-expanded', open ? 'true' : 'false');
+    document.documentElement.classList.toggle('sheet-open', open);
+  }
+  function bindShell() {
+    $('#lockBtn').onclick = signOut; $('#sideSignout').onclick = signOut; $('#msSignout').onclick = signOut; $('#ucSignout').onclick = signOut;
+    $('#moreBtn').onclick = () => setMore(!$('#moreSheet').classList.contains('open'));
+    $('#moreScrim').onclick = () => setMore(false);
+    $('#moreSheet').onclick = (e) => { if (e.target.closest('a')) setMore(false); };
+    $('#msLang').onclick = () => { setMore(false); $('#langBtn').click(); };
+    $('#msTheme').onclick = () => { setMore(false); $('#themeBtn').click(); };
+    const am = $('#acctMenu');
+    $('#avatar').onclick = (e) => { e.stopPropagation(); am.classList.toggle('hide'); $('#avatar').setAttribute('aria-expanded', am.classList.contains('hide') ? 'false' : 'true'); };
+    am.onclick = (e) => { const b = e.target.closest('[data-am]'); am.classList.add('hide'); if (!b) return; if (b.dataset.am === 'out') signOut(); if (b.dataset.am === 'lang') $('#langBtn').click(); if (b.dataset.am === 'theme') $('#themeBtn').click(); };
+    $('#searchBtn').onclick = () => { document.documentElement.classList.toggle('search-open'); if (document.documentElement.classList.contains('search-open')) setTimeout(() => $('#gq').focus(), 30); };
+  }
+  document.addEventListener('click', (e) => { const am = $('#acctMenu'); if (am && !am.classList.contains('hide') && !e.target.closest('#acctMenu')) am.classList.add('hide'); });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { if ($('#moreSheet') && $('#moreSheet').classList.contains('open')) setMore(false); if ($('#acctMenu')) $('#acctMenu').classList.add('hide'); document.documentElement.classList.remove('search-open'); } });
 
   function bindGlobalSearch() {
     const inp = $('#gq'), res = $('#gres');
@@ -217,7 +273,7 @@
     };
     res.onclick = (e) => {
       const a = e.target.closest('a'); if (!a) return;
-      res.classList.add('hide'); inp.value = '';
+      res.classList.add('hide'); inp.value = ''; document.documentElement.classList.remove('search-open');
       setTimeout(() => {
         if (a.dataset.prod) productModal(D().products.find(p => p.id === a.dataset.prod));
         if (a.dataset.order) orderModal(a.dataset.order);
@@ -230,11 +286,22 @@
   function go() {
     const h = location.hash.replace(/^#\/?/, '') || 'dashboard';
     route = ROUTES.find(r => r.id === h) ? h : 'dashboard';
-    $('#app').classList.remove('nav-open');
+    $('#app').classList.remove('nav-open'); setMore(false); document.documentElement.classList.remove('search-open');
     $$('.overlay').forEach(o => o.parentNode && o.parentNode.removeChild(o));
     render();
     window.scrollTo(0, 0);
   }
+  // Phones show table rows as cards: every cell gets its column name as a label.
+  function labelTables(root) {
+    (root || document).querySelectorAll('table.t').forEach(tb => {
+      const heads = [...tb.querySelectorAll('thead th')].map(th => th.textContent.trim());
+      if (!heads.length) return;
+      tb.classList.add('t-cards');
+      tb.querySelectorAll('tbody tr').forEach(tr => [...tr.children].forEach((td, i) => { if (!td.hasAttribute('data-label')) td.setAttribute('data-label', heads[i] || ''); }));
+    });
+  }
+  let labelQueued = false;
+  new MutationObserver(() => { if (labelQueued) return; labelQueued = true; requestAnimationFrame(() => { labelQueued = false; labelTables(document); }); }).observe(document.body, { childList: true, subtree: true });
   function render() {
     killCharts(); chartDefaults();
     renderShell();
@@ -394,7 +461,7 @@
     const q = state.orderQ.toLowerCase();
     if (q) list = list.filter(s => (s.no + ' ' + s.customerName + ' ' + s.phone + ' ' + s.city).toLowerCase().includes(q));
     list = list.sort((a, b) => b.date - a.date);
-    const shown = list.slice(0, 200);
+    const shown = list.slice(0, state.lim.orders || PAGE);
 
     v.innerHTML = `
       <div class="page-head"><div><h2>${t('orders')}</h2><p>${t('pipeline')}</p></div>
@@ -408,10 +475,11 @@
           ${state.orderStatus !== 'all' && state.orderTab === 'online' ? `<button class="btn sm ghost" id="oclr">${icon('x')}${t('st_' + state.orderStatus)}</button>` : ''}
           <span class="faint" style="margin-inline-start:auto">${list.length} ${t('orders_n').toLowerCase()}</span>
         </div>
-        <div class="table-wrap">${ordersTable(shown)}</div>
+        <div class="table-wrap">${ordersTable(shown)}</div>${moreBtn('orders', list.length)}
       </div>`;
+    bindMore(v);
     $$('.pipe', v).forEach(p => p.onclick = () => { state.orderTab = 'online'; state.orderStatus = state.orderStatus === p.dataset.st ? 'all' : p.dataset.st; render(); });
-    bindSeg('otab', k => { state.orderTab = k; state.orderStatus = 'all'; render(); });
+    bindSeg('otab', k => { state.orderTab = k; state.orderStatus = 'all'; state.lim.orders = 0; render(); });
     const oq = $('#oq'); oq.oninput = debounce(() => { state.orderQ = oq.value; render(); $('#oq').focus(); const e = $('#oq'); e.setSelectionRange(e.value.length, e.value.length); }, 250);
     $('#osrc').onchange = (e) => { state.orderSrc = e.target.value; render(); };
     if ($('#oclr')) $('#oclr').onclick = () => { state.orderStatus = 'all'; render(); };
@@ -574,11 +642,12 @@
           <div class="seg" id="istock">${[['all', t('all')], ['low', t('low_stock')], ['out', t('out_of_stock')]].map(([k, l]) => `<button data-k="${k}" class="${state.invStock === k ? 'on' : ''}">${l}</button>`).join('')}</div>
           <span class="faint" style="margin-inline-start:auto">${list.length}</span></div>
         <div class="table-wrap">${list.length ? `<table class="t"><thead><tr><th>${t('product')}</th><th>${t('brand')}</th><th>${t('category')}</th><th class="r">${t('cost')}</th><th class="r">${t('price')}</th><th class="r">${t('margin')}</th><th class="r">${t('stock')}</th><th>${t('location')}</th><th></th></tr></thead><tbody>
-          ${list.map(p => `<tr><td><div class="cell-prod">${thumb(p)}<div><div class="strong">${esc(p.name)}</div><div class="faint" style="font-size:12px">${esc(p.sku)} · ${esc(p.fitment)}</div></div></div></td><td>${esc(p.brand)}</td><td><span class="chip">${catName(p.category)}</span></td>
+          ${list.slice(0, state.lim.inv || PAGE).map(p => `<tr><td><div class="cell-prod">${thumb(p)}<div><div class="strong">${esc(p.name)}</div><div class="faint" style="font-size:12px">${esc(p.sku)} · ${esc(p.fitment)}</div></div></div></td><td>${esc(p.brand)}</td><td><span class="chip">${catName(p.category)}</span></td>
             <td class="r">${money(p.cost)}</td><td class="r strong">${money(p.price)}</td><td class="r muted num">${pct((p.price - p.cost) / p.price * 100)}</td>
             <td class="r"><span class="pill ${p.stock === 0 ? 's-cancelled' : p.stock <= p.reorder ? 's-processing' : 's-delivered'}">${p.stock}</span></td><td class="muted">${esc(p.location)}</td>
             <td class="r" style="white-space:nowrap"><button class="btn sm" data-adj="${p.id}">± ${t('stock')}</button> <button class="btn sm ghost" data-edit="${p.id}" aria-label="${t('edit')}">${icon('edit')}</button></td></tr>`).join('')}
-          </tbody></table>` : `<div class="empty">${t('no_results')}</div>`}</div>`;
+          </tbody></table>` : `<div class="empty">${t('no_results')}</div>`}</div>${moreBtn('inv', list.length)}`;
+      bindMore(v);
       const iq = $('#iq'); iq.oninput = debounce(() => { state.invQ = iq.value; render(); const e = $('#iq'); e.focus(); e.setSelectionRange(e.value.length, e.value.length); }, 250);
       $('#icat').onchange = (e) => { state.invCat = e.target.value; render(); };
       bindSeg('istock', k => { state.invStock = k; render(); });
@@ -973,8 +1042,9 @@
     const f = (k, lbl, type) => `<div class="field"><label>${lbl}</label><input class="input" id="st_${k}" type="${type || 'text'}" value="${esc(s[k])}"></div>`;
     v.innerHTML = `
       <div class="page-head"><div><h2>${t('settings')}</h2></div></div>
+      <nav class="jump" aria-label="${esc(t('settings'))}">${[['set-biz', t('business_info')], ['set-ai', 'AI'], ['set-sec', t('security')], ['set-pub', I18N.lang === 'ar' ? 'النشر' : 'Publish'], ['set-data', t('data_mgmt')], ['set-look', t('language') + ' & ' + t('theme')]].map(([id, l]) => `<a href="#${id}" data-jump="${id}">${esc(l)}</a>`).join('')}</nav>
       <div class="grid g-21">
-        <div class="card"><div class="card-h"><h3>${t('business_info')}</h3></div><div class="card-b">
+        <div class="card" id="set-biz"><div class="card-h"><h3>${t('business_info')}</h3></div><div class="card-b">
           <div class="form-grid">${f('name', t('business_name'))}${f('tagline', t('tagline'))}${f('phone', t('phone'))}${f('email', t('email'), 'email')}${f('address', t('address'))}${f('cr', t('cr_no'))}${f('vat', t('vat_rate'), 'number')}${f('currency', 'Currency')}</div>
           <h3 style="margin:22px 0 12px;font-size:15px">${icon('store')} ${t('store_settings')}</h3>
           <div class="form-grid">${f('whatsapp', t('whatsapp_no'))}${f('instagram', 'Instagram')}${f('maps', 'Google Maps link')}${f('siteUrl', t('site_url'))}${f('rating', 'Google rating')}${f('followers', 'Instagram followers')}<div class="field full"><label>${I18N.lang === 'ar' ? 'رابط مساعد القطع بالذكاء الاصطناعي (اختياري، https)' : 'AI parts assistant URL (optional, https)'}</label><input class="input" id="st_aiEndpoint" dir="ltr" placeholder="https://assistant.example.workers.dev" value="${esc(s.aiEndpoint || '')}"><p class="faint" style="font-size:12px;margin:4px 0 0">${I18N.lang === 'ar' ? 'بدونه يعمل مساعد القطع في المتجر بمحرك مدمج. لإجابات Claude انشر worker/assistant-proxy.js وضع رابطه هنا ثم انشر الموقع.' : 'Without it, the store\'s parts assistant uses its built-in engine. For Claude answers, deploy worker/assistant-proxy.js, paste its URL here, then publish.'}</p></div>
@@ -984,20 +1054,20 @@
             <div class="field"><label>${t('qp_merchant')}</label><input class="input" id="st_qmid" value="${esc(s.qpay.merchantId)}"></div><div class="field"><label>${t('qp_link')}</label><input class="input" id="st_qlink" value="${esc(s.qpay.payLink)}"></div></div>
           <div class="actions mt"><button class="btn primary" id="st_save">${icon('check')}${t('save')}</button><a class="btn" href="index.html?preview" target="_blank" rel="noopener" id="st_prev">${icon('external')}${t('preview_store')}</a></div></div></div>
         <div>
-          <div class="card"><div class="card-h"><h3>${t('language')} & ${t('theme')}</h3></div><div class="card-b">
+          <div class="card" id="set-look"><div class="card-h"><h3>${t('language')} & ${t('theme')}</h3></div><div class="card-b">
             <div class="field"><label>${t('language')}</label><div class="seg" id="st_lang"><button data-k="en" class="${I18N.lang === 'en' ? 'on' : ''}">English</button><button data-k="ar" class="${I18N.lang === 'ar' ? 'on' : ''}">العربية</button></div></div>
             <div class="field mt"><label>${t('theme')}</label><div class="seg" id="st_theme"><button data-k="light" class="${s.theme !== 'dark' ? 'on' : ''}">${t('light')}</button><button data-k="dark" class="${s.theme === 'dark' ? 'on' : ''}">${t('dark')}</button></div></div></div></div>
-          <div class="card mt"><div class="card-h"><h3>${icon('sparkle')} ${t('ai_key')}</h3>${AI.getKey() ? `<span class="pill s-delivered">ON</span>` : ''}</div><div class="card-b">
+          <div class="card mt" id="set-ai"><div class="card-h"><h3>${icon('sparkle')} ${t('ai_key')}</h3>${AI.getKey() ? `<span class="pill s-delivered">ON</span>` : ''}</div><div class="card-b">
             <p class="muted" style="margin:0 0 10px">${t('ai_key_help')}</p>
             <div class="actions"><input class="input" id="st_key" type="password" autocomplete="off" placeholder="${AI.getKey() ? '•••••••• ' + esc(AI.getKey().slice(-4)) : 'sk-ant-…'}" style="flex:1;min-width:180px"><button class="btn primary" id="st_keysave">${t('save')}</button>${AI.getKey() ? `<button class="btn danger" id="st_keyrm">${t('remove_key')}</button>` : ''}</div></div></div>
-          <div class="card mt" id="secCard"><div class="card-h"><h3>${icon('shield')} ${t('security')}</h3><button class="btn sm" id="sec_lock">${icon('lock')}${t('lock_now')}</button></div><div class="card-b">
+          <div class="card mt" id="secCard"><span id="set-sec"></span><div class="card-h"><h3>${icon('shield')} ${t('security')}</h3><button class="btn sm" id="sec_lock">${icon('lock')}${t('lock_now')}</button></div><div class="card-b">
             <p class="muted" style="margin:0 0 12px;font-size:13px">${t('sec_note')}</p>
             <div class="form-grid"><div class="field"><label>${t('away_lock')}</label><select class="input" id="sec_away">${[[0, 'away_now'], [60, 'away_1'], [300, 'away_5'], [900, 'away_15']].map(([v, k]) => `<option value="${v}" ${+s.awayLockSec === v ? 'selected' : ''}>${t(k)}</option>`).join('')}</select></div>
             <div class="field"><label>${t('auto_lock')}</label><select class="input" id="sec_auto">${[5, 15, 30, 60, 240].map(m => `<option value="${m}" ${s.autoLockMin === m ? 'selected' : ''}>${m} ${t('minutes')}</option>`).join('')}</select></div></div>
             <form id="sec_pw" class="form-grid mt" autocomplete="off"><input type="text" name="username" value="admin" autocomplete="username" hidden><div class="field full"><label>${t('cur_pw')}</label><input class="input" type="password" id="sec_cur" autocomplete="current-password"></div><div class="field"><label>${t('new_pw')}</label><input class="input" type="password" id="sec_new" autocomplete="new-password" minlength="8"></div><div class="field"><label>${t('confirm_pw')}</label><input class="input" type="password" id="sec_new2" autocomplete="new-password"></div>
               <div class="field full"><div class="actions"><button class="btn primary" type="submit" id="sec_go">${t('change_pw')}</button><span id="sec_msg" class="muted" style="font-size:13px"></span></div></div></form></div></div>
           ${H.publishCard()}
-          <div class="card mt"><div class="card-h"><h3>${t('data_mgmt')}</h3></div><div class="card-b">
+          <div class="card mt" id="set-data"><div class="card-h"><h3>${t('data_mgmt')}</h3></div><div class="card-b">
             <div class="notice">${icon('alert')}<div>${t('unpaid_note')}</div></div>
             <div class="actions mt"><button class="btn ghost danger" id="st_erase">${icon('trash')}${t('erase_all')}</button><button class="btn" id="st_bk">${icon('download')}${t('backup')}</button><label class="btn">${icon('upload')}${t('restore')}<input type="file" id="st_rs" accept=".json,application/json" hidden></label><button class="btn danger" id="st_reset">${icon('refresh')}${t('reset_demo')}</button>${D().demo ? `<button class="btn primary" id="st_fresh">${icon('check')}${t('start_fresh')}</button>` : ''}</div>${D().demo ? `<p class="faint" style="font-size:12.5px;margin:8px 0 0">${t('start_fresh_help')}</p>` : ''}</div></div>
         </div>
@@ -1013,6 +1083,7 @@
     $('#st_reset').onclick = () => confirmBox(t('reset_demo') + '?', () => { DB.reset(); state.cart = []; toast(t('saved')); render(); });
     if ($('#st_fresh')) $('#st_fresh').onclick = () => confirmBox(t('start_fresh_help'), () => { DB.startFresh(); state.cart = []; toast(t('saved')); render(); });
     H.bindPublish(v);
+    $$('[data-jump]', v).forEach(a => a.onclick = (e) => { e.preventDefault(); const el = document.getElementById(a.dataset.jump); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); });
     $('#st_erase').onclick = () => { const typed = prompt(t('erase_q')); if (typed === 'ERASE' && window.Auth) Auth.eraseAll(); };
     if ($('#sec_lock')) $('#sec_lock').onclick = () => window.Auth && Auth.lock();
     $('#sec_auto').onchange = (e) => { s.autoLockMin = +e.target.value; DB.save(); toast(t('saved')); };
