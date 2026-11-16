@@ -13,7 +13,7 @@
    ============================================================ */
 (function (global) {
   'use strict';
-  const AUTH = 'x4w_auth', VAULT = 'x4w_vault', FAILS = 'x4w_auth_fail', SESS = 'x4w_sess';
+  const AUTH = 'x4w_auth', VAULT = 'x4w_vault', FAILS = 'x4w_auth_fail', SESS = 'x4w_sess', LOCK_AT = 'x4w_lock_at';
   const LEGACY_DB = 'x4w_db_v2', LEGACY_AI = 'bh_ai_key', LEGACY_GH = 'x4w_gh_token';
   const ITER = 600000, MIN_LEN = 8, MAX_FREE_TRIES = 5;
   const enc = new TextEncoder(), dec = new TextDecoder();
@@ -68,7 +68,22 @@
     });
   }
 
-  async function startSession(k, rawKey) {
+  // ---------- session ----------
+  // One lock for the whole browser: whenever any tab locks or shows the sign-in page it writes
+  // LOCK_AT, and every unlocked tab whose session started earlier locks itself at once.
+  // A session also ends when the dashboard was left (app switch, other tab, phone screen off)
+  // for longer than the "lock when I leave" time, and after the idle time.
+  let sess = null, hiddenAt = 0, beat = null;
+  const lockedSince = () => +ls.get(LOCK_AT) || 0;
+  const graceMs = () => { const v = DB.data && DB.data.settings ? DB.data.settings.awayLockSec : undefined; return (v == null ? 60 : +v) * 1000; };
+  function saveSess() { if (!sess) return; sess.grace = graceMs(); try { sessionStorage.setItem(SESS, JSON.stringify(sess)); } catch (e) { } }
+  function sessionValid(s) {
+    const now = Date.now();
+    return !!(s && s.k && s.exp > now && now - (s.seen || 0) <= Math.max(s.grace == null ? 60000 : s.grace, 15000) && (s.at || 0) > lockedSince());
+  }
+  function broadcastLock() { try { ls.set(LOCK_AT, String(Date.now())); } catch (e) { } }
+
+  async function startSession(k, rawKey, at) {
     key = k;
     const sealed = ls.get(VAULT);
     let data = null;
@@ -77,8 +92,11 @@
     DB.setPersist(persist);
     if (!sealed) DB.save();
     try { ls.set('x4w_ui', JSON.stringify({ theme: DB.data.settings.theme, lang: DB.data.settings.lang })); } catch (e) { }
-    try { sessionStorage.setItem(SESS, JSON.stringify({ k: b64(rawKey || await subtle.exportKey('raw', k)), exp: Date.now() + idleMs() })); } catch (e) { }
+    const now = Date.now();
+    sess = { k: b64(rawKey || await subtle.exportKey('raw', k)), at: Math.max(at || now, lockedSince() + 1), exp: now + idleMs(), seen: now };
+    saveSess();
     unmountGate();
+    document.documentElement.classList.add('unlocked');
     watchIdle();
     if (!started) { started = true; onReady.splice(0).forEach(fn => fn()); }
   }
@@ -123,10 +141,10 @@
   async function resumeSession() {
     try {
       const s = JSON.parse(sessionStorage.getItem(SESS) || 'null');
-      if (!s || !s.k || s.exp < Date.now() || !hasAccount()) { sessionStorage.removeItem(SESS); return false; }
+      if (!sessionValid(s) || !hasAccount()) { sessionStorage.removeItem(SESS); return false; }
       const raw = unb64(s.k), k = await importRaw(raw);
       const a = jget(AUTH, null); if (await open(k, a.check) !== 'x4w-ok') return false;
-      await startSession(k, raw);
+      await startSession(k, raw, s.at);
       return true;
     } catch (e) { try { sessionStorage.removeItem(SESS); } catch (er) { } return false; }
   }
@@ -143,41 +161,69 @@
     ls.set(VAULT, vault);
     ls.set(AUTH, JSON.stringify({ v: 1, salt: b64(salt), iter: ITER, check, created: a.created, changed: Date.now() }));
     key = k;
-    try { sessionStorage.setItem(SESS, JSON.stringify({ k: b64(await subtle.exportKey('raw', k)), exp: Date.now() + idleMs() })); } catch (e) { }
+    if (sess) { sess.k = b64(await subtle.exportKey('raw', k)); saveSess(); }
   }
 
-  async function lock() {
-    await saving;
+  let locking = false;
+  async function lock(fromOtherTab) {
+    if (locking) return; locking = true;
+    // hide everything first, so no data is visible while the page reloads
+    document.documentElement.classList.remove('unlocked');
+    const v = document.getElementById('view'); if (v) v.innerHTML = '';
+    document.querySelectorAll('.overlay, .modal, .toast').forEach(el => el.remove());
     try { sessionStorage.removeItem(SESS); } catch (e) { }
+    if (!fromOtherTab) broadcastLock();
+    sess = null;
+    try { await saving; } catch (e) { }
     key = null;
     location.reload();
   }
   // Forgot password: the data cannot be recovered without it, so the only option is to erase it.
   function eraseAll() {
     [AUTH, VAULT, FAILS, LEGACY_DB, LEGACY_AI, LEGACY_GH, 'x4w_preview'].forEach(ls.del);
+    broadcastLock();
     try { sessionStorage.removeItem(SESS); } catch (e) { }
     location.reload();
   }
 
-  // ---------- idle auto-lock ----------
+  // ---------- auto-lock: idle, away from the app, locked elsewhere ----------
   function watchIdle() {
     const bump = () => {
       const now = Date.now();
       if (now - lastActive < 15000) return; // throttle
       lastActive = now;
-      try { const s = JSON.parse(sessionStorage.getItem(SESS) || 'null'); if (s) { s.exp = now + idleMs(); sessionStorage.setItem(SESS, JSON.stringify(s)); } } catch (e) { }
+      if (sess) { sess.exp = now + idleMs(); sess.seen = now; saveSess(); }
     };
     ['pointerdown', 'keydown', 'touchstart', 'wheel'].forEach(ev => global.addEventListener(ev, bump, { passive: true }));
-    const check = () => { if (Date.now() - lastActive > idleMs()) lock(); };
-    clearInterval(idleTimer); idleTimer = setInterval(check, 20000);
-    document.addEventListener('visibilitychange', () => { if (!document.hidden) check(); });
+    const check = () => {
+      if (!key) return;
+      if (Date.now() - lastActive > idleMs()) return lock();
+      if (sess && lockedSince() >= sess.at) return lock(true);
+    };
+    clearInterval(idleTimer); idleTimer = setInterval(check, 5000);
+    // heartbeat: proves the page was open recently (a reload soon after is allowed, an old restored tab is not)
+    clearInterval(beat); beat = setInterval(() => { if (sess && !document.hidden) { sess.seen = Date.now(); saveSess(); } }, 5000);
+    const away = () => { hiddenAt = Date.now(); if (sess) { sess.seen = hiddenAt; saveSess(); } document.documentElement.classList.add('away'); };
+    const back = () => {
+      document.documentElement.classList.remove('away');
+      if (!key) return;
+      if (hiddenAt && Date.now() - hiddenAt > graceMs()) return lock();
+      hiddenAt = 0;
+      check();
+    };
+    document.addEventListener('visibilitychange', () => { if (document.hidden) away(); else back(); });
+    global.addEventListener('pagehide', away);
+    // page brought back from the browser's back/forward cache: re-check everything
+    global.addEventListener('pageshow', (e) => { if (e.persisted) { let s = null; try { s = JSON.parse(sessionStorage.getItem(SESS) || 'null'); } catch (er) { } if (!sessionValid(s) || (hiddenAt && Date.now() - hiddenAt > graceMs())) lock(); else back(); } });
+    global.addEventListener('focus', () => { if (!document.hidden) back(); });
   }
 
   // ---------- cross-tab sync (another admin tab saved) ----------
   global.addEventListener('storage', async (e) => {
     if (!key) return;
     if (e.key === VAULT && e.newValue) { try { DB.replace(JSON.parse(await open(key, e.newValue))); } catch (er) { } }
-    if (e.key === AUTH && e.newValue !== e.oldValue) lock(); // password changed or erased elsewhere
+    if (e.key === AUTH && e.newValue !== e.oldValue) lock(true); // password changed or erased elsewhere
+    if (e.key === LOCK_AT && sess && (+e.newValue || 0) >= sess.at) lock(true); // locked / sign-in shown in another tab
   });
 
   // ---------- login screen ----------
@@ -189,6 +235,9 @@
   }
   function mountGate() {
     document.documentElement.classList.add('locked');
+    document.documentElement.classList.remove('unlocked');
+    if (key) { lock(); return; }
+    broadcastLock(); // the sign-in page is showing here, so lock every other open tab too
     const setup = !hasAccount();
     const legacy = setup && !!ls.get(LEGACY_DB);
     gate = document.createElement('div');
