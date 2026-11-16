@@ -34,7 +34,7 @@ async function setupAdmin(page, hash) {
 // The dashboard is ready when the lock screen is gone and a view has rendered.
 async function unlocked(page) {
   await expect(page.locator('.auth')).toHaveCount(0, { timeout: 20000 });
-  await expect(page.locator('#view > *').first()).toBeVisible({ timeout: 20000 });
+  await expect(page.locator('#view > *:visible').first()).toBeVisible({ timeout: 20000 });
   await page.waitForFunction(() => window.DB && DB.data && DB.data.settings);
 }
 async function login(page, pw) {
