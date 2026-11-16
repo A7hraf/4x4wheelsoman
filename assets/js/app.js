@@ -10,7 +10,7 @@
   const t = I18N.t;
   I18N.add('en', {
     security: 'Security & login', lock_now: 'Lock now', change_pw: 'Change password', cur_pw: 'Current password', new_pw: 'New password', confirm_pw: 'Confirm new password', pw_changed: 'Password changed',
-    pw_mismatch: 'The new passwords do not match.', auto_lock: 'Lock automatically after', minutes: 'minutes', sec_note: 'The dashboard is locked with your password and all data on this device is encrypted (AES-256). Backup files are not encrypted and never include your API key or GitHub token — store them safely.',
+    pw_mismatch: 'The new passwords do not match.', auto_lock: 'Lock when not used for', away_lock: 'Lock when I leave the app (switch app, other tab, screen off) for', away_now: 'Immediately', away_1: '1 minute', away_5: '5 minutes', away_15: '15 minutes', minutes: 'minutes', sec_note: 'The dashboard is locked with your password and all data on this device is encrypted (AES-256). Backup files are not encrypted and never include your API key or GitHub token — store them safely.',
     erase_all: 'Erase all data on this device', erase_q: 'This deletes every order, customer, product change and key stored on this device. Download a backup first. Type ERASE to continue:',
     ai_write: 'Write with AI', ai_writing: 'Writing…', ai_done: 'Filled in — check it before saving', ai_reading: 'Reading the message…', ai_read: 'Read with AI', looking_up: 'Looking up',
     t_search_products: 'products', t_customer_history: 'customer history', t_find_orders: 'orders', t_sales_breakdown: 'sales breakdown', t_reorder_plan: 'reorder plan', t_open_quotes: 'open quotes',
@@ -18,7 +18,7 @@
   });
   I18N.add('ar', {
     security: 'الأمان وتسجيل الدخول', lock_now: 'قفل الآن', change_pw: 'تغيير كلمة المرور', cur_pw: 'كلمة المرور الحالية', new_pw: 'كلمة المرور الجديدة', confirm_pw: 'تأكيد كلمة المرور الجديدة', pw_changed: 'تم تغيير كلمة المرور',
-    pw_mismatch: 'كلمتا المرور الجديدتان غير متطابقتين.', auto_lock: 'القفل التلقائي بعد', minutes: 'دقيقة', sec_note: 'لوحة التحكم مقفلة بكلمة المرور وكل البيانات على هذا الجهاز مشفّرة (AES-256). ملفات النسخ الاحتياطي غير مشفّرة ولا تتضمن مفتاح API أو رمز GitHub — احفظها في مكان آمن.',
+    pw_mismatch: 'كلمتا المرور الجديدتان غير متطابقتين.', auto_lock: 'القفل عند عدم الاستخدام لمدة', away_lock: 'القفل عند مغادرة التطبيق (تبديل التطبيق، تبويب آخر، إطفاء الشاشة) لمدة', away_now: 'فوراً', away_1: 'دقيقة واحدة', away_5: '5 دقائق', away_15: '15 دقيقة', minutes: 'دقيقة', sec_note: 'لوحة التحكم مقفلة بكلمة المرور وكل البيانات على هذا الجهاز مشفّرة (AES-256). ملفات النسخ الاحتياطي غير مشفّرة ولا تتضمن مفتاح API أو رمز GitHub — احفظها في مكان آمن.',
     erase_all: 'حذف كل البيانات على هذا الجهاز', erase_q: 'سيتم حذف كل الطلبات والعملاء وتعديلات المنتجات والمفاتيح على هذا الجهاز. نزّل نسخة احتياطية أولاً. اكتب ERASE للمتابعة:',
     ai_write: 'اكتب بالذكاء الاصطناعي', ai_writing: 'جارٍ الكتابة…', ai_done: 'تمت التعبئة — راجعها قبل الحفظ', ai_reading: 'جارٍ قراءة الرسالة…', ai_read: 'اقرأ بالذكاء الاصطناعي', looking_up: 'جارٍ البحث في',
     t_search_products: 'المنتجات', t_customer_history: 'سجل العميل', t_find_orders: 'الطلبات', t_sales_breakdown: 'تفاصيل المبيعات', t_reorder_plan: 'خطة إعادة الطلب', t_open_quotes: 'عروض الأسعار المفتوحة',
@@ -945,7 +945,8 @@
             <div class="actions"><input class="input" id="st_key" type="password" autocomplete="off" placeholder="${AI.getKey() ? '•••••••• ' + esc(AI.getKey().slice(-4)) : 'sk-ant-…'}" style="flex:1;min-width:180px"><button class="btn primary" id="st_keysave">${t('save')}</button>${AI.getKey() ? `<button class="btn danger" id="st_keyrm">${t('remove_key')}</button>` : ''}</div></div></div>
           <div class="card mt" id="secCard"><div class="card-h"><h3>${icon('shield')} ${t('security')}</h3><button class="btn sm" id="sec_lock">${icon('lock')}${t('lock_now')}</button></div><div class="card-b">
             <p class="muted" style="margin:0 0 12px;font-size:13px">${t('sec_note')}</p>
-            <div class="field"><label>${t('auto_lock')}</label><select class="input" id="sec_auto" style="max-width:200px">${[5, 15, 30, 60, 240].map(m => `<option value="${m}" ${s.autoLockMin === m ? 'selected' : ''}>${m} ${t('minutes')}</option>`).join('')}</select></div>
+            <div class="form-grid"><div class="field"><label>${t('away_lock')}</label><select class="input" id="sec_away">${[[0, 'away_now'], [60, 'away_1'], [300, 'away_5'], [900, 'away_15']].map(([v, k]) => `<option value="${v}" ${+s.awayLockSec === v ? 'selected' : ''}>${t(k)}</option>`).join('')}</select></div>
+            <div class="field"><label>${t('auto_lock')}</label><select class="input" id="sec_auto">${[5, 15, 30, 60, 240].map(m => `<option value="${m}" ${s.autoLockMin === m ? 'selected' : ''}>${m} ${t('minutes')}</option>`).join('')}</select></div></div>
             <form id="sec_pw" class="form-grid mt" autocomplete="off"><input type="text" name="username" value="admin" autocomplete="username" hidden><div class="field full"><label>${t('cur_pw')}</label><input class="input" type="password" id="sec_cur" autocomplete="current-password"></div><div class="field"><label>${t('new_pw')}</label><input class="input" type="password" id="sec_new" autocomplete="new-password" minlength="8"></div><div class="field"><label>${t('confirm_pw')}</label><input class="input" type="password" id="sec_new2" autocomplete="new-password"></div>
               <div class="field full"><div class="actions"><button class="btn primary" type="submit" id="sec_go">${t('change_pw')}</button><span id="sec_msg" class="muted" style="font-size:13px"></span></div></div></form></div></div>
           ${H.publishCard()}
@@ -968,6 +969,7 @@
     $('#st_erase').onclick = () => { const typed = prompt(t('erase_q')); if (typed === 'ERASE' && window.Auth) Auth.eraseAll(); };
     if ($('#sec_lock')) $('#sec_lock').onclick = () => window.Auth && Auth.lock();
     $('#sec_auto').onchange = (e) => { s.autoLockMin = +e.target.value; DB.save(); toast(t('saved')); };
+    $('#sec_away').onchange = (e) => { s.awayLockSec = +e.target.value; DB.save(); toast(t('saved')); };
     $('#sec_pw').onsubmit = async (e) => {
       e.preventDefault();
       const msg = $('#sec_msg'), cur = $('#sec_cur').value, nw = $('#sec_new').value;

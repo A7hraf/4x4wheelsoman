@@ -168,6 +168,7 @@
     d.settings.github = Object.assign({ owner: 'A7hraf', repo: '4x4wheelsoman', branch: 'main' }, d.settings.github || {});
     d.settings.leadDays = d.settings.leadDays || 14; d.settings.coverDays = d.settings.coverDays || 30;
     d.settings.autoLockMin = d.settings.autoLockMin || 15;
+    if (d.settings.awayLockSec == null) d.settings.awayLockSec = 60;
     return d;
   }
   function load() {
