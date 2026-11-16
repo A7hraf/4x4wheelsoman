@@ -5,7 +5,7 @@ A static website (no server needed) hosted on **GitHub Pages**.
 | Page | Address | For |
 |---|---|---|
 | Online store | `https://a7hraf.github.io/4x4wheelsoman/` | Customers |
-| Admin dashboard | `https://a7hraf.github.io/4x4wheelsoman/admin.html` | Owner only (don't share) |
+| Admin dashboard | `https://a7hraf.github.io/4x4wheelsoman/admin.html` | Owner only — protected by a password |
 | Online invoice | `…/bill.html#…` | Opened by customers from the WhatsApp bill link |
 
 ## Online store
@@ -13,9 +13,18 @@ A static website (no server needed) hosted on **GitHub Pages**.
 - Real catalog: 58 parts, 9 categories, 19 vehicles and 20 brands, with photos, part numbers, specs and fitment.
 - Pages: home (vehicle finder, categories, brands, popular upgrades, Qpay, fitment help), shop with filters, categories, vehicles, product pages (zoom, fit checker, specs), Pay in installments (Qpay calculator and FAQ), Visit us, and the quote list.
 - The quote list is sent to WhatsApp with the customer's vehicle and an optional Qpay request.
+- **Parts assistant** (chat button, bottom corner): customers type what they need in English or Arabic ("lift kit for my LC300 2023", "ابي كفرات للباترول") and get only parts that fit their vehicle, with *Add to quote* buttons, answers about hours, location, Qpay and delivery, and a hand-off to WhatsApp. It works with no server and no API key. Optionally, it can use Claude through a small proxy you host (see `worker/`).
 
 ## Admin dashboard
+- **Login**: the dashboard is locked with your password (see *Security* below). Lock button in the top bar; auto-lock when idle.
 - **Dashboard, Point of Sale, Orders, Inventory, Purchasing, Finance, Reports, Customers, AI Advisor.**
+- **AI (Claude)** — add your Claude API key in Settings:
+  - *AI Advisor* chat that can look up your real products, customers, orders, sales breakdowns, open quotes and the reorder plan before it answers ("What did Ahmed buy?", "Which Patrol parts sell best on WhatsApp?").
+  - *Read with AI* in **Quotes → Paste from WhatsApp**: turns any customer message (English/Arabic, any format) into quote lines from your catalog, and lists what isn't in the catalog.
+  - *Write with AI* on products (English + Arabic description and bullet points) and on WhatsApp campaigns.
+  - AI executive summary in the printable business report.
+- **Works without AI too**: pasted WhatsApp messages in plain words are understood by the built-in matcher, and smart insights run offline.
+- **Purchasing forecast**: reorder suggestions use sales over the last 60 days, your supplier lead time and target days of stock, and subtract what is already on open purchase orders (so nothing is ordered twice).
 - **Quotes**: paste the customer's WhatsApp message (sent from the website) to build a quote automatically, price it, send it back on WhatsApp, then convert it to an order.
 - **WhatsApp**
   - Send a bill: a professional online invoice link sent to the customer on WhatsApp.
@@ -26,12 +35,37 @@ A static website (no server needed) hosted on **GitHub Pages**.
 - **Publish to website**: push product, price and setting changes to the live store with one click, using a GitHub token. You can also download `catalog.js` and upload it to `assets/js/` yourself.
 
 ## First-time setup
-1. Open **Admin → Settings**. Check the business details and WhatsApp number. Click **Start fresh** to remove the demo orders and demo prices.
-2. Open **Inventory**. Set your real prices and stock. Tick **Show price on website** only for items with a fixed price; all others show "Price on request".
-3. In **Settings → Publish to website**, paste a GitHub fine-grained token with *Contents: Read and write* on this repository only, then click **Publish now**.
+1. Open the admin page and **create your admin password** (at least 8 characters; there is no way to recover it — keep it safe). Existing dashboard data on that browser is kept and encrypted.
+2. Open **Admin → Settings**. Check the business details and WhatsApp number. Click **Start fresh** to remove the demo orders and demo prices.
+3. Open **Inventory**. Set your real prices and stock. Tick **Show price on website** only for items with a fixed price; all others show "Price on request".
+4. In **Settings → Publish to website**, paste a GitHub fine-grained token with *Contents: Read and write* on this repository only, then click **Publish now**.
+
+5. Optional: paste a Claude API key in **Settings → AI (Claude) connection** to switch on the AI features.
+
+## Security
+- **Password + encryption.** The site has no server, so the password unlocks the data itself: it is turned into a key with PBKDF2-SHA256 (600,000 rounds) and all admin data — orders, customers, costs, the Claude API key and the GitHub token — is compressed and encrypted with AES-256-GCM in the browser. Nothing readable is left in browser storage.
+- While a tab is unlocked, its key is kept in that tab's session storage so a page reload doesn't ask again; locking, the idle timer or closing the tab clears it. Other tabs need the password.
+- 5 wrong passwords → a short lock-out that doubles each time (up to 15 minutes). Auto-lock after 15 minutes idle (changeable in Settings → Security). Change the password in Settings → Security.
+- **Forgot the password?** The data can't be decrypted without it. On the sign-in page choose *Forgot password?* and type `ERASE` to wipe that device, then restore a backup.
+- **Backups** (Settings → Download backup) are plain JSON so you can restore anywhere — store them safely. They never include the API key or GitHub token.
+- Content-Security-Policy on every page, no third-party scripts (Chart.js and the Anthropic SDK are served from `assets/vendor/`), the dashboard refuses to open inside another site's frame, and invoice links can't change the shop's name, phone, WhatsApp number or payment link.
+- Limits of a static site: the password protects the data on each device; it is not a server account. Anyone can open `admin.html`, but they only see an empty dashboard on their own device — never your data. The lock-out counter lives in the browser, so the real protection against guessing is the slow key derivation plus a strong password: use 12+ characters.
+
+## AI parts assistant with Claude (optional)
+The store assistant works without any setup. To have Claude answer customers, deploy the small Cloudflare Worker in `worker/` (free plan is enough). It keeps your API key secret, only answers your website, rate-limits each visitor and only recommends products from your published catalog. Then paste its URL in **Settings → AI parts assistant URL** and click **Publish**. See `worker/README.md`. Never put an API key in the website itself.
+
+## Tests
+End-to-end tests (Playwright) cover the store, every dashboard workflow, the AI features (with a fake Claude API), login and security:
+```
+cd tests
+npm install
+npx playwright install chromium
+npm test
+```
 
 ## Notes
-- Admin data (orders, customers, expenses) is stored in the browser you use for the admin. Download a backup regularly (Settings → Download backup).
+- Admin data (orders, customers, expenses) is stored, encrypted, in the browser you use for the admin. Download a backup regularly (Settings → Download backup).
+- When you click **Preview website** in Settings, a public copy of the catalog (no costs, no customers) is saved so `index.html?preview` can show your unpublished changes.
 - WhatsApp messages open in WhatsApp or WhatsApp Business with the text ready, and you press Send. Fully automatic sending would need the Meta WhatsApp Business Cloud API and a server.
 - Qpay (Oman) doesn't publish a public merchant API. Requests are created in the Qpay merchant app/portal, and the dashboard tracks each request and messages the customer.
 - Only send marketing messages to customers who agreed to receive them (the "opt-in" flag on each customer).

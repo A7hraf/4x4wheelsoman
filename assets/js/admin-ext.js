@@ -34,7 +34,6 @@
   });
 
   const WA_SVG = '<svg class="ic" viewBox="0 0 32 32" fill="currentColor" aria-hidden="true"><path d="M16 3C8.8 3 3 8.7 3 15.8c0 2.5.7 4.9 2 7L3 29l6.4-2c2 1.1 4.3 1.7 6.6 1.7 7.2 0 13-5.7 13-12.8S23.2 3 16 3Zm0 23.4c-2.1 0-4.1-.6-5.9-1.7l-.4-.3-3.8 1.2 1.2-3.7-.3-.4a10.4 10.4 0 0 1-1.6-5.6C5.2 10 10 5.3 16 5.3S26.8 10 26.8 15.8 22 26.4 16 26.4Zm5.9-7.8c-.3-.2-1.9-.9-2.2-1-.3-.1-.5-.2-.7.2-.2.3-.8 1-1 1.2-.2.2-.4.2-.7.1-.3-.2-1.4-.5-2.6-1.6-1-.9-1.6-1.9-1.8-2.2-.2-.3 0-.5.1-.7l.5-.6.3-.5c.1-.2 0-.4 0-.6l-1-2.4c-.3-.6-.5-.5-.7-.5h-.6c-.2 0-.6.1-.9.4-.3.3-1.2 1.1-1.2 2.7s1.2 3.2 1.4 3.4c.2.2 2.4 3.6 5.8 5 .8.3 1.4.5 1.9.7.8.3 1.5.2 2.1.1.6-.1 1.9-.8 2.2-1.5.3-.7.3-1.4.2-1.5-.1-.2-.3-.3-.6-.4Z"/></svg>';
-  const TOKEN_KEY = 'x4w_gh_token';
 
   window.BH_EXT = window.BH_EXT || [];
   window.BH_EXT.push(function (H, VIEWS) {
@@ -81,8 +80,9 @@
     }
 
     // ---------- publishing ----------
-    const getToken = () => { try { return localStorage.getItem(TOKEN_KEY) || ''; } catch (e) { return ''; } };
-    const setToken = (v) => { try { v ? localStorage.setItem(TOKEN_KEY, v.trim()) : localStorage.removeItem(TOKEN_KEY); } catch (e) { } };
+    // The GitHub token is kept inside the encrypted admin database (auth.js), not in plain localStorage.
+    const getToken = () => (D().secrets || {}).ghToken || '';
+    const setToken = (v) => { D().secrets.ghToken = (v || '').trim(); DB.save(); };
     function buildCatalog(imagePaths) {
       const st = S(), base = window.CATALOG || {};
       const cats = (base.categories || []).map(c => Object.assign({}, c, (D().categories.find(x => x.id === c.id) || {})));
@@ -96,10 +96,12 @@
       const brands = (base.brands || []).slice();
       products.forEach(p => { if (p.brand && !brands.find(b => b.name === p.brand)) brands.push({ id: p.brand.toLowerCase().replace(/[^a-z0-9]+/g, '-'), name: p.brand, label: p.brand.toUpperCase(), about: '' }); });
       return {
-        settings: { name: st.name, whatsapp: st.whatsapp, phone: st.phone, instagram: st.instagram, maps: st.maps, address: st.address, addressAr: st.addressAr, qpayLimit: st.qpay.limit, currency: st.currency, since: st.since, rating: st.rating, followers: st.followers, showStock: !!st.showStock },
+        settings: { name: st.name, whatsapp: st.whatsapp, phone: st.phone, instagram: st.instagram, maps: st.maps, address: st.address, addressAr: st.addressAr, qpayLimit: st.qpay.limit, currency: st.currency, since: st.since, rating: st.rating, followers: st.followers, showStock: !!st.showStock, cr: st.cr || '', qpayLink: /^https:\/\//.test(st.qpay.payLink || '') ? st.qpay.payLink : '', aiEndpoint: /^https:\/\//.test(st.aiEndpoint || '') ? st.aiEndpoint : '' },
         categories: cats, makes: base.makes || D().makes || [], vehicles: base.vehicles || D().vehicles || [], brands, products, publishedAt: new Date().toISOString()
       };
     }
+    // "Preview website": the store reads this public copy (no costs, no customers) instead of the encrypted database
+    function writePreview() { try { localStorage.setItem('x4w_preview', JSON.stringify({ at: Date.now(), products: buildCatalog().products })); } catch (e) { } }
     const catalogJS = (cat) => '/* Catalog published from the admin dashboard on ' + new Date().toISOString() + ' */\nwindow.CATALOG = ' + JSON.stringify(cat) + ';\n';
     async function gh(path, contentB64, message) {
       const g = S().github, tok = getToken();
@@ -140,12 +142,13 @@
         <div class="actions mt"><button class="btn primary" id="gh_pub">${icon('upload')}${t('publish_now')}</button><button class="btn" id="gh_dl">${icon('download')}${t('download_catalog')}</button>${tok ? `<button class="btn ghost danger" id="gh_rm">${t('remove_key')}</button>` : ''}</div><div id="gh_st" class="muted" style="margin-top:10px;font-size:13px"></div></div></div>`;
     }
     function bindPublish(v) {
-      const saveCfg = () => { const [o, r] = ($('#gh_repo', v).value || '').split('/'); if (o && r) Object.assign(S().github, { owner: o.trim(), repo: r.trim() }); S().github.branch = $('#gh_branch', v).value.trim() || 'main'; const tk = $('#gh_tok', v).value.trim(); if (tk) setToken(tk); DB.save(); };
+      // only "owner/repo" with GitHub's allowed characters, so the token can't be sent to another API path
+      const saveCfg = () => { const parts = ($('#gh_repo', v).value || '').trim().split('/').map(x => x.trim()); const [o, r] = parts; if (parts.length === 2 && /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/.test(o) && /^[A-Za-z0-9._-]{1,100}$/.test(r) && !/^\.+$/.test(r)) Object.assign(S().github, { owner: o, repo: r }); const br = $('#gh_branch', v).value.trim(); S().github.branch = /^[A-Za-z0-9._\/-]{1,100}$/.test(br) && !br.includes('..') ? br : 'main'; const tk = $('#gh_tok', v).value.trim(); if (tk) setToken(tk); DB.save(); };
       $('#gh_pub', v).onclick = () => { saveCfg(); publish($('#gh_st', v)); };
       $('#gh_dl', v).onclick = () => download('catalog.js', catalogJS(buildCatalog()), 'text/javascript');
       if ($('#gh_rm', v)) $('#gh_rm', v).onclick = () => { setToken(''); H.render(); };
     }
-    Object.assign(H, { WA: WA_SVG, waLink, fill, sendBill, notifyModal, billLink, qpayTone, publishCard, bindPublish, openWA });
+    Object.assign(H, { WA: WA_SVG, waLink, fill, sendBill, notifyModal, billLink, qpayTone, publishCard, bindPublish, openWA, writePreview });
 
     // ======================================================
     // QUOTES
@@ -186,7 +189,7 @@
         title: `${t('quote_no')} ${esc(q.no)}`, wide: true,
         body: `<div class="form-grid"><div class="field"><label>${t('customer_name')}</label><input class="input" id="q_n" value="${esc(c.name === '—' ? '' : c.name)}"></div><div class="field"><label>${t('phone')}</label><input class="input" id="q_p" dir="ltr" value="${esc(c.phone || '')}" placeholder="+968"></div>
           <div class="field"><label>${t('vehicle')}</label><input class="input" id="q_v" value="${esc(q.vehicle || '')}" placeholder="Toyota Land Cruiser 300 2024"></div><div class="field"><label>&nbsp;</label><label class="check"><input type="checkbox" id="q_q" ${q.qpay ? 'checked' : ''}> ${t('wants_qpay')}</label></div>
-          <div class="field full"><label>${t('items')}</label><div id="q_lines"></div></div><div class="field full"><label>${t('note')}</label><input class="input" id="q_note" value="${esc(q.note || '')}"></div></div>
+          <div class="field full"><label>${t('items')}</label><div id="q_lines"></div></div><div class="field full"><label>${t('note')}</label><input class="input" id="q_note" value="${esc(q.note || '')}"></div>${q.message ? `<div class="field full"><details><summary class="faint" style="cursor:pointer;font-size:12.5px">${I18N.lang === 'ar' ? 'رسالة العميل الأصلية' : 'Original customer message'}</summary><pre class="wa-bubble" style="white-space:pre-wrap;margin:6px 0 0;font:inherit">${esc(q.message)}</pre></details></div>` : ''}</div>
           <div class="totals mt" id="q_tot" style="border-radius:10px"></div>`,
         footer: `${!isNew ? `<button class="btn ghost danger" id="q_del" style="margin-inline-end:auto">${icon('trash')}</button><button class="btn" id="q_lost">${t('mark_lost')}</button>` : '<span style="margin-inline-end:auto"></span>'}<button class="btn" id="q_save">${t('save')}</button><button class="btn wa" id="q_send">${WA_SVG}${t('send_quote')}</button><button class="btn primary" id="q_conv">${icon('check')}${t('convert')}</button>`,
         onMount: (el, m) => {
@@ -241,20 +244,39 @@
       });
       return out;
     }
+    const matcher = window.Match ? Match.create({ products: () => D().products.filter(p => p.active !== false), vehicles: D().vehicles || [], makes: D().makes || [], categories: D().categories, brands: D().brands || [] }) : null;
     function importModal() {
       modal({
-        title: t('import_wa'),
-        body: `<div class="field"><label>${t('paste_here')}</label><textarea class="input" id="im_t" rows="10" placeholder="Hi 4x4 Wheels, please quote these parts:&#10;• 1 × Old Man Emu BP-51 Suspension Kit (Land Cruiser 300) [EKBP00173]&#10;Vehicle: Toyota Land Cruiser 300 2023"></textarea></div><div class="form-grid mt"><div class="field"><label>${t('phone')}</label><input class="input" id="im_p" dir="ltr" placeholder="+968"></div></div><div id="im_r" class="muted" style="margin-top:8px"></div>`,
-        footer: `<button class="btn" data-close>${t('cancel')}</button><button class="btn primary" id="im_go">${t('parse')}</button>`,
+        title: t('import_wa'), wide: true,
+        body: `<div class="field"><label>${t('paste_here')}</label><textarea class="input" id="im_t" rows="9" placeholder="• 1 × Old Man Emu BP-51 Suspension Kit (Land Cruiser 300) [EKBP00173]&#10;Vehicle: Toyota Land Cruiser 300 2023&#10;&#10;— or any message, e.g. —&#10;salam, need lift kit + 4 tyres for my patrol 2021&#10;ابي طقم رفع وكفرات للاندكروزر 300"></textarea></div><div class="form-grid mt"><div class="field"><label>${t('phone')}</label><input class="input" id="im_p" dir="ltr" placeholder="+968"></div></div><div id="im_r" class="muted" style="margin-top:8px"></div>`,
+        footer: `<button class="btn" data-close>${t('cancel')}</button><button class="btn" id="im_ai" title="${AI.getKey() ? '' : esc(H.t('no_key'))}">${icon('sparkle')}${H.t('ai_read')}</button><button class="btn primary" id="im_go">${t('parse')}</button>`,
         onMount: (el, m) => {
-          $('#im_go', el).onclick = () => {
-            const r = parseWA($('#im_t', el).value);
-            if (!r.items.length) { $('#im_r', el).textContent = t('parsed', { n: 0 }); return; }
+          const open = (r, how) => {
+            const msg = $('#im_t', el).value.trim();
+            if (!r.items.length) { $('#im_r', el).innerHTML = esc(t('parsed', { n: 0 })) + (r.unmatched && r.unmatched.length ? `<br>${esc(r.unmatched.join(' · '))}` : ''); return; }
             m.close();
             const ph = $('#im_p', el).value.trim();
             const cu = (r.name || ph) ? DB.findOrCreateCustomer(r.name || 'WhatsApp customer', ph) : null;
-            quoteModal(null, { items: r.items, vehicle: r.vehicle, qpay: r.qpay, customerId: cu ? cu.id : null, note: r.ref ? 'Ref ' + r.ref : '' });
-            toast(t('parsed', { n: r.items.length }));
+            const missing = (r.unmatched || []).length ? 'Not in catalog: ' + r.unmatched.join('; ') : '';
+            quoteModal(null, { items: r.items, vehicle: r.vehicle, qpay: r.qpay, customerId: cu ? cu.id : null, note: [r.ref ? 'Ref ' + r.ref : '', missing].filter(Boolean).join(' · '), message: msg.slice(0, 2000) });
+            toast(t('parsed', { n: r.items.length }) + (how ? ' · ' + how : ''));
+          };
+          $('#im_go', el).onclick = () => {
+            const txt = $('#im_t', el).value;
+            let r = parseWA(txt);
+            // not the website's format? understand it as a normal customer message
+            if (!r.items.length && matcher) r = matcher.parseQuote(txt);
+            open(r);
+          };
+          $('#im_ai', el).onclick = async () => {
+            if (!AI.getKey()) { toast(H.t('no_key')); return; }
+            const txt = $('#im_t', el).value.trim(); if (!txt) return;
+            const btn = $('#im_ai', el); btn.disabled = true; $('#im_r', el).innerHTML = `<span class="typing"><i></i><i></i><i></i></span> ${H.t('ai_reading')}`;
+            try {
+              const a = await AI.quoteFromText(txt);
+              open({ items: a.items, vehicle: a.vehicle, qpay: a.wants_qpay, name: a.customer_name, unmatched: a.not_in_catalog }, 'AI');
+            } catch (e) { $('#im_r', el).textContent = '⚠️ ' + AI.explainError(e, I18N.lang); }
+            btn.disabled = false;
           };
         }
       });
@@ -372,7 +394,7 @@
           <div class="field"><label>${t('audience')}</label><select class="input" id="cp_a"><option value="all">${t('all_optin')}</option><option value="vehicle">${t('by_vehicle')}</option><option value="gov">${t('by_gov')}</option><option value="cat">${t('by_cat')}</option><option value="workshop">${t('workshops')}</option><option value="inactive">${t('inactive')}</option></select></div>
           <div class="field"><label>&nbsp;</label><select class="input hide" id="cp_av"></select></div>
           <div class="field full"><label>${t('products_in_msg')}</label><select class="input" id="cp_p" multiple size="5">${prods.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join('')}</select></div>
-          <div class="field full"><label>${t('message')}</label><textarea class="input" id="cp_m" rows="5">${esc(defMsg)}</textarea></div></div>
+          <div class="field full"><label style="display:flex;justify-content:space-between;align-items:center">${t('message')}<button class="btn sm" type="button" id="cp_ai" title="${AI.getKey() ? '' : esc(H.t('no_key'))}">${icon('sparkle')}${H.t('ai_write')}</button></label><textarea class="input" id="cp_m" rows="5">${esc(defMsg)}</textarea></div></div>
           <div class="grid g-2 mt" style="align-items:start"><div><label class="faint" style="font-size:12.5px">${t('preview')}</label><div class="wa-bubble" id="cp_prev"></div></div><div><label class="faint" style="font-size:12.5px">${t('recipients')}: <b id="cp_cnt"></b></label><div id="cp_list" class="faint" style="font-size:13px;max-height:180px;overflow:auto"></div></div></div>`,
         footer: `<button class="btn" data-close>${t('cancel')}</button><button class="btn wa" id="cp_go">${WA_SVG}${t('create_send')}</button>`,
         onMount: (el, m) => {
@@ -395,6 +417,16 @@
             $('#cp_prev', el).textContent = build(rec[0]);
           };
           $('#cp_a', el).onchange = () => { fillAv(); upd(); }; av.onchange = upd; $('#cp_m', el).oninput = upd; $('#cp_p', el).onchange = upd;
+          $('#cp_ai', el).onclick = async () => {
+            if (!AI.getKey()) { toast(H.t('no_key')); return; }
+            const btn = $('#cp_ai', el); btn.disabled = true; btn.innerHTML = `<span class="typing"><i></i><i></i><i></i></span> ${H.t('ai_writing')}`;
+            try {
+              const aud = $('#cp_a', el).selectedOptions[0].textContent + (av.classList.contains('hide') ? '' : ': ' + av.selectedOptions[0].textContent);
+              $('#cp_m', el).value = await AI.campaignCopy({ audience: aud, products: $$('#cp_p option:checked', el).map(o => DB.product(o.value)).filter(Boolean), lang });
+              upd();
+            } catch (e) { toast('⚠️ ' + AI.explainError(e, I18N.lang)); }
+            btn.disabled = false; btn.innerHTML = `${icon('sparkle')}${H.t('ai_write')}`;
+          };
           fillAv(); upd();
           $('#cp_go', el).onclick = () => {
             const k = $('#cp_a', el).value, rec = audience(k, av.value);

@@ -154,39 +154,60 @@
   }
 
   // ---------- storage ----------
+  // When the admin login is active (assets/js/auth.js), the whole database is kept
+  // encrypted: Auth calls DB.init(data) after unlocking and sets DB.persist to a
+  // function that encrypts and stores each save. Without Auth (old behaviour, tests,
+  // the store's ?preview) the data falls back to plain localStorage.
   let db = null;
+  let persist = null;
   function migrate(d) {
     d.quotes = d.quotes || []; d.held = d.held || []; d.campaigns = d.campaigns || []; d.waLog = d.waLog || [];
+    d.secrets = Object.assign({ aiKey: '', ghToken: '' }, d.secrets || {});
     d.settings.templates = Object.assign({}, DEFAULT_TEMPLATES, d.settings.templates || {});
     d.settings.qpay = Object.assign({ enabled: true, limit: 500, installments: 4, feePct: 0, merchantId: '', payLink: 'https://qpay.om/' }, d.settings.qpay || {});
     d.settings.github = Object.assign({ owner: 'A7hraf', repo: '4x4wheelsoman', branch: 'main' }, d.settings.github || {});
+    d.settings.leadDays = d.settings.leadDays || 14; d.settings.coverDays = d.settings.coverDays || 30;
+    d.settings.autoLockMin = d.settings.autoLockMin || 15;
     return d;
   }
   function load() {
+    if (db) return db;
     try { const raw = localStorage.getItem(KEY); if (raw) { db = migrate(JSON.parse(raw)); return db; } } catch (e) { }
-    db = buildSeed(); save(); return db;
+    db = migrate(buildSeed()); save(); return db;
   }
+  // Auth hands over decrypted data (or null for a brand-new install)
+  function init(data) { db = migrate(data || buildSeed()); return db; }
+  function setPersist(fn) { persist = fn; }
+  function uiPrefs() { try { localStorage.setItem('x4w_ui', JSON.stringify({ theme: db.settings.theme, lang: db.settings.lang })); } catch (e) { } }
   function save() {
     let ok = true;
-    try { localStorage.setItem(KEY, JSON.stringify(db)); } catch (e) { ok = false; }
+    if (persist) { try { persist(JSON.stringify(db)); } catch (e) { ok = false; } }
+    else { try { localStorage.setItem(KEY, JSON.stringify(db)); } catch (e) { ok = false; } }
+    uiPrefs();
     try { global.dispatchEvent(new CustomEvent('db:change')); } catch (e) { }
     return ok;
   }
-  function reset() { db = buildSeed(); save(); return db; }
+  // replace data that changed in another tab (Auth decrypts it first)
+  function replace(data) { db = migrate(data); try { global.dispatchEvent(new CustomEvent('db:change', { detail: { external: true } })); } catch (e) { } }
+  const keepSecrets = (fn) => { const sec = db && db.secrets; fn(); if (sec) db.secrets = sec; };
+  function reset() { keepSecrets(() => { db = migrate(buildSeed()); }); save(); return db; }
   // keep the catalog, settings and customers; remove demo transactions and demo numbers
   function startFresh() {
-    db.sales = []; db.expenses = []; db.purchases = []; db.moves = []; db.quotes = []; db.campaigns = []; db.waLog = []; db.customers = [];
+    db.sales = []; db.expenses = []; db.purchases = []; db.moves = []; db.quotes = []; db.campaigns = []; db.waLog = []; db.customers = []; db.held = [];
     db.products.forEach(p => { p.price = 0; p.cost = 0; p.stock = 0; p.oldPrice = 0; p.showPrice = false; });
     db.demo = false; save();
   }
-  function exportJSON() { return JSON.stringify(db, null, 2); }
+  // backups never contain the API key or GitHub token
+  function exportJSON() { const copy = Object.assign({}, db); delete copy.secrets; return JSON.stringify(copy, null, 2); }
   function importJSON(text) {
     const d = JSON.parse(text);
-    if (!d || !Array.isArray(d.products) || !Array.isArray(d.sales)) throw new Error('Invalid backup file');
-    db = migrate(d); save(); return db;
+    if (!d || typeof d !== 'object' || !Array.isArray(d.products) || !Array.isArray(d.sales) || !d.settings || typeof d.settings !== 'object') throw new Error('Invalid backup file');
+    delete d.secrets;
+    keepSecrets(() => { db = migrate(d); }); save(); return db;
   }
   global.addEventListener('storage', (e) => {
-    if (e.key === KEY && e.newValue) { try { db = migrate(JSON.parse(e.newValue)); global.dispatchEvent(new CustomEvent('db:change', { detail: { external: true } })); } catch (er) { } }
+    if (persist) return; // encrypted mode: Auth handles cross-tab sync
+    if (e.key === KEY && e.newValue) { try { replace(JSON.parse(e.newValue)); } catch (er) { } }
   });
 
   // ---------- domain helpers ----------
@@ -288,7 +309,7 @@
   function cogs(s) { return s.items.reduce((a, it) => a + it.qty * (it.cost || 0), 0); }
 
   global.DB = {
-    load, save, reset, startFresh, exportJSON, importJSON, uid, r3, DAY, GOVERNORATES, DEFAULT_TEMPLATES,
+    load, init, save, replace, setPersist, buildSeed, reset, startFresh, exportJSON, importJSON, uid, r3, DAY, GOVERNORATES, DEFAULT_TEMPLATES, KEY,
     get data() { return db; },
     product, customer, supplier, vehicle, createSale, setOrderStatus, setQpay, returnItems, adjustStock, receivePurchase, findOrCreateCustomer, logWA,
     countsAsRevenue, netSales, cogs, nextNo

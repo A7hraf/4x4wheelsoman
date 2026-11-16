@@ -1,0 +1,12 @@
+{
+  "name": "4x4wheelsoman-tests",
+  "private": true,
+  "description": "End-to-end workflow and security tests for the store and admin dashboard",
+  "scripts": {
+    "test": "playwright test",
+    "report": "playwright show-report"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0"
+  }
+}

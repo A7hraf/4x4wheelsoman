@@ -1,12 +1,29 @@
 /* ============================================================
    Business Hub – dashboard application
    ============================================================ */
-(function () {
+// Starts only after the admin password has unlocked the data (assets/js/auth.js).
+(window.Auth ? Auth.ready : (f) => f())(function () {
   'use strict';
   const db = DB.load();
   const D = () => DB.data;
   const H = window.BH = {};
   const t = I18N.t;
+  I18N.add('en', {
+    security: 'Security & login', lock_now: 'Lock now', change_pw: 'Change password', cur_pw: 'Current password', new_pw: 'New password', confirm_pw: 'Confirm new password', pw_changed: 'Password changed',
+    pw_mismatch: 'The new passwords do not match.', auto_lock: 'Lock automatically after', minutes: 'minutes', sec_note: 'The dashboard is locked with your password and all data on this device is encrypted (AES-256). Backup files are not encrypted and never include your API key or GitHub token — store them safely.',
+    erase_all: 'Erase all data on this device', erase_q: 'This deletes every order, customer, product change and key stored on this device. Download a backup first. Type ERASE to continue:',
+    ai_write: 'Write with AI', ai_writing: 'Writing…', ai_done: 'Filled in — check it before saving', ai_reading: 'Reading the message…', ai_read: 'Read with AI', looking_up: 'Looking up',
+    t_search_products: 'products', t_customer_history: 'customer history', t_find_orders: 'orders', t_sales_breakdown: 'sales breakdown', t_reorder_plan: 'reorder plan', t_open_quotes: 'open quotes',
+    lead_days: 'Supplier lead time (days)', cover_days: 'Stock to cover (days)', per_week: '/ week', days_left: 'days left', on_order: 'on order', urgent: 'Urgent', reorder_how: 'Based on sales over the last 60 days, supplier lead time and open purchase orders.'
+  });
+  I18N.add('ar', {
+    security: 'الأمان وتسجيل الدخول', lock_now: 'قفل الآن', change_pw: 'تغيير كلمة المرور', cur_pw: 'كلمة المرور الحالية', new_pw: 'كلمة المرور الجديدة', confirm_pw: 'تأكيد كلمة المرور الجديدة', pw_changed: 'تم تغيير كلمة المرور',
+    pw_mismatch: 'كلمتا المرور الجديدتان غير متطابقتين.', auto_lock: 'القفل التلقائي بعد', minutes: 'دقيقة', sec_note: 'لوحة التحكم مقفلة بكلمة المرور وكل البيانات على هذا الجهاز مشفّرة (AES-256). ملفات النسخ الاحتياطي غير مشفّرة ولا تتضمن مفتاح API أو رمز GitHub — احفظها في مكان آمن.',
+    erase_all: 'حذف كل البيانات على هذا الجهاز', erase_q: 'سيتم حذف كل الطلبات والعملاء وتعديلات المنتجات والمفاتيح على هذا الجهاز. نزّل نسخة احتياطية أولاً. اكتب ERASE للمتابعة:',
+    ai_write: 'اكتب بالذكاء الاصطناعي', ai_writing: 'جارٍ الكتابة…', ai_done: 'تمت التعبئة — راجعها قبل الحفظ', ai_reading: 'جارٍ قراءة الرسالة…', ai_read: 'اقرأ بالذكاء الاصطناعي', looking_up: 'جارٍ البحث في',
+    t_search_products: 'المنتجات', t_customer_history: 'سجل العميل', t_find_orders: 'الطلبات', t_sales_breakdown: 'تفاصيل المبيعات', t_reorder_plan: 'خطة إعادة الطلب', t_open_quotes: 'عروض الأسعار المفتوحة',
+    lead_days: 'مدة توريد المورد (أيام)', cover_days: 'تغطية المخزون (أيام)', per_week: '/ أسبوع', days_left: 'يوم متبقي', on_order: 'تحت الطلب', urgent: 'عاجل', reorder_how: 'بناءً على مبيعات آخر 60 يوماً ومدة التوريد وأوامر الشراء المفتوحة.'
+  });
   I18N.set(D().settings.lang || 'en');
 
   // ---------------- utilities ----------------
@@ -168,6 +185,7 @@
     $('#langBtn').innerHTML = `<span style="font-weight:700;font-size:12px">${I18N.lang === 'ar' ? 'EN' : 'ع'}</span>`;
     $('#themeBtn').innerHTML = icon(document.documentElement.dataset.theme === 'dark' || (!document.documentElement.dataset.theme && matchMedia('(prefers-color-scheme: dark)').matches) ? 'sun' : 'moon');
     $('#avatar').textContent = initials;
+    if ($('#lockBtn')) { $('#lockBtn').innerHTML = icon('lock'); $('#lockBtn').title = t('lock_now'); $('#lockBtn').onclick = () => window.Auth && Auth.lock(); }
     $('#pageTitle').textContent = t(route);
     document.title = t(route) + ' · ' + s.name;
     $('#gsearch').innerHTML = `${icon('search')}<input id="gq" placeholder="${t('search')}" autocomplete="off"><div class="gresults hide" id="gres"></div>`;
@@ -548,18 +566,34 @@
         <div class="field full"><label>${t('description')} (EN)</label><textarea class="input" id="p_description" rows="3">${esc(p.description || '')}</textarea></div>
         <div class="field full"><label>${t('description')} (عربي)</label><textarea class="input" id="p_descriptionAr" dir="rtl" rows="3">${esc(p.descriptionAr || '')}</textarea></div>
       </div>${!isNew ? `<div class="notice mt">${icon('reports')}<div>${t('margin')}: <b>${p.price ? pct((p.price - p.cost) / p.price * 100) : '—'}</b> · ${t('stock_value')}: <b>${moneyTxt(p.stock * p.cost)}</b></div></div>` : ''}`,
-      footer: `${!isNew ? `<button class="btn danger" id="p_del" style="margin-inline-end:auto">${icon('trash')}${t('delete')}</button>` : ''}<button class="btn" data-close>${t('cancel')}</button><button class="btn primary" id="p_save">${icon('check')}${t('save')}</button>`,
+      footer: `${!isNew ? `<button class="btn danger" id="p_del">${icon('trash')}${t('delete')}</button>` : ''}<button class="btn" id="p_ai" style="margin-inline-end:auto" title="${AI.getKey() ? '' : esc(t('no_key'))}">${icon('sparkle')}${t('ai_write')}</button><button class="btn" data-close>${t('cancel')}</button><button class="btn primary" id="p_save">${icon('check')}${t('save')}</button>`,
       onMount: (el, m) => {
         const drawImg = () => { $('#p_photo', el).innerHTML = productArt(Object.assign({}, p, { image: img, category: $('#p_category', el).value })); $('#p_rmimg', el).classList.toggle('hide', !img); };
         drawImg();
         $('#p_category', el).onchange = drawImg;
         $('#p_rmimg', el).onclick = () => { img = ''; drawImg(); };
+        let aiBullets = null;
+        $('#p_ai', el).onclick = async () => {
+          if (!AI.getKey()) { toast(t('no_key')); return; }
+          const g = (k) => $('#p_' + k, el), btn = $('#p_ai', el);
+          const draft = Object.assign({}, p, { name: g('name').value.trim(), brand: g('brand').value.trim(), partNumber: g('partNumber').value.trim(), category: g('category').value, fitment: g('fitment').value.trim(), description: g('description').value.trim(), vehicles: $$('.p_veh:checked', el).map(x => x.value) });
+          if (!draft.name) { g('name').focus(); return; }
+          btn.disabled = true; btn.innerHTML = `<span class="typing"><i></i><i></i><i></i></span> ${t('ai_writing')}`;
+          try {
+            const r = await AI.productCopy(draft);
+            if (!g('nameAr').value.trim()) g('nameAr').value = r.name_ar;
+            g('description').value = r.description_en; g('descriptionAr').value = r.description_ar;
+            aiBullets = { en: r.bullets_en, ar: r.bullets_ar };
+            toast(t('ai_done'));
+          } catch (e) { toast('⚠️ ' + AI.explainError(e, I18N.lang)); }
+          btn.disabled = false; btn.innerHTML = `${icon('sparkle')}${t('ai_write')}`;
+        };
         $('#p_file', el).onchange = async (e) => { const fl = e.target.files[0]; if (!fl) return; try { img = await shrinkImage(fl, 700); drawImg(); } catch (er) { alert('Could not read this image'); } };
         $('#p_save', el).onclick = () => {
           const g = (k) => $('#p_' + k, el);
           const name = g('name').value.trim(); if (!name) { g('name').focus(); return; }
           const pn = g('partNumber').value.trim();
-          const data = { name, nameAr: g('nameAr').value.trim(), partNumber: pn, sku: pn || p.sku || 'SKU-' + Date.now().toString(36).toUpperCase(), slug: p.slug || (name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60) + '-' + Date.now().toString(36).slice(-4)), vehicles: $$('.p_veh:checked', el).map(x => x.value), showPrice: g('showPrice').checked, descriptionAr: g('descriptionAr').value.trim(), bullets: p.bullets || [], bulletsAr: p.bulletsAr || [], allMakes: p.allMakes || [], brand: g('brand').value.trim(), category: g('category').value, fitment: g('fitment').value.trim(), cost: DB.r3(+g('cost').value || 0), price: DB.r3(+g('price').value || 0), reorder: Math.max(0, parseInt(g('reorder').value, 10) || 0), location: g('location').value.trim(), online: g('online').checked, featured: g('featured').checked, oldPrice: DB.r3(+g('oldPrice').value || 0), description: g('description').value.trim(), image: img };
+          const data = { name, nameAr: g('nameAr').value.trim(), partNumber: pn, sku: pn || p.sku || 'SKU-' + Date.now().toString(36).toUpperCase(), slug: p.slug || (name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60) + '-' + Date.now().toString(36).slice(-4)), vehicles: $$('.p_veh:checked', el).map(x => x.value), showPrice: g('showPrice').checked, descriptionAr: g('descriptionAr').value.trim(), bullets: aiBullets ? aiBullets.en : (p.bullets || []), bulletsAr: aiBullets ? aiBullets.ar : (p.bulletsAr || []), allMakes: p.allMakes || [], brand: g('brand').value.trim(), category: g('category').value, fitment: g('fitment').value.trim(), cost: DB.r3(+g('cost').value || 0), price: DB.r3(+g('price').value || 0), reorder: Math.max(0, parseInt(g('reorder').value, 10) || 0), location: g('location').value.trim(), online: g('online').checked, featured: g('featured').checked, oldPrice: DB.r3(+g('oldPrice').value || 0), description: g('description').value.trim(), image: img };
           if (isNew) { const np = Object.assign({ id: DB.uid('p'), active: true, stock: 0 }, data); D().products.push(np); const st = parseInt(g('stock').value, 10) || 0; if (st) DB.adjustStock(np.id, st, 'adjust', '', 'Opening stock'); }
           else Object.assign(p, data);
           if (!DB.save()) alert('Browser storage is full — the photo was not saved. Use a smaller photo or remove some.');
@@ -586,7 +620,7 @@
   // =====================================================
   function viewPurchases(v) {
     const pos = D().purchases.slice().sort((a, b) => b.date - a.date);
-    const reorder = D().products.filter(p => p.active !== false && p.stock <= p.reorder).map(p => ({ p, qty: Math.max(p.reorder * 2 - p.stock, 1) }));
+    const reorder = AI.reorderPlan().map(r => ({ p: DB.product(r.pid), qty: r.suggest, r })).filter(x => x.p);
     const openPO = pos.filter(p => p.status === 'ordered');
     v.innerHTML = `
       <div class="page-head"><div><h2>${t('purchases')}</h2><p>${t('suppliers')} · ${t('reorder_list')}</p></div><div class="actions"><button class="btn primary" id="poadd">${icon('plus')}${t('new_po')}</button></div></div>
@@ -601,11 +635,14 @@
           ${pos.length ? `<table class="t"><thead><tr><th>PO</th><th>${t('date')}</th><th>${t('supplier')}</th><th>${t('items')}</th><th class="r">${t('total')}</th><th>${t('status')}</th><th></th></tr></thead><tbody>
           ${pos.map(po => `<tr><td class="strong">${esc(po.no)}</td><td class="muted">${fDate(po.date)}</td><td>${esc((DB.supplier(po.supplierId) || {}).name || '—')}</td><td class="muted">${po.items.map(i => i.qty + '× ' + esc((DB.product(i.pid) || {}).sku || '')).join(', ')}</td><td class="r strong">${money(po.total)}</td><td>${statusPill(po.status)}</td><td class="r">${po.status === 'ordered' ? `<button class="btn sm primary" data-recv="${po.id}">${icon('check')}${t('receive')}</button>` : ''}</td></tr>`).join('')}</tbody></table>` : `<div class="empty">${t('no_results')}</div>`}</div></div></div>
         <div class="card"><div class="card-h"><h3>${t('reorder_list')}</h3>${reorder.length ? `<button class="btn sm" id="poauto">${icon('plus')}PO</button>` : ''}</div><div class="card-b">
-          <ul class="mini-list">${reorder.map(r => `<li>${thumb(r.p)}<div class="grow"><div class="name">${esc(r.p.name)}</div><div class="faint" style="font-size:12px">${t('stock')} ${r.p.stock} / ${t('reorder')} ${r.p.reorder}</div></div><b class="num">+${r.qty}</b></li>`).join('') || `<div class="empty">✓</div>`}</ul></div></div>
+          <p class="faint" style="font-size:12px;margin:0 0 8px">${t('reorder_how')}</p>
+          <div class="form-grid" style="grid-template-columns:1fr 1fr;margin-bottom:10px"><div class="field"><label>${t('lead_days')}</label><input class="input num" type="number" min="1" max="180" id="ro_lead" value="${D().settings.leadDays}"></div><div class="field"><label>${t('cover_days')}</label><input class="input num" type="number" min="1" max="365" id="ro_cover" value="${D().settings.coverDays}"></div></div>
+          <ul class="mini-list" id="roList">${reorder.map(x => `<li>${thumb(x.p)}<div class="grow"><div class="name">${esc(x.p.name)}${x.r.urgent ? ` <span class="pill s-cancelled">${t('urgent')}</span>` : ''}</div><div class="faint" style="font-size:12px">${t('stock')} ${x.r.stock}${x.r.on_order ? ` · ${x.r.on_order} ${t('on_order')}` : ''} · ${x.r.per_week} ${t('per_week')}${x.r.days_left != null ? ` · ${x.r.days_left} ${t('days_left')}` : ''}</div></div><b class="num">+${x.qty}</b></li>`).join('') || `<div class="empty">✓</div>`}</ul></div></div>
       </div>
       <div class="card mt"><div class="card-h"><h3>${t('suppliers')}</h3><button class="btn sm" id="supadd">${icon('plus')}${t('supplier')}</button></div><div class="card-b" style="padding:12px 0 0"><div class="table-wrap"><table class="t"><thead><tr><th>${t('supplier')}</th><th>Country</th><th>${t('phone')}</th><th class="r">${t('purchases')}</th></tr></thead><tbody>
         ${D().suppliers.map(s => `<tr><td class="strong">${esc(s.name)}</td><td>${esc(s.country)}</td><td class="muted">${esc(s.phone)}</td><td class="r">${money(D().purchases.filter(p => p.supplierId === s.id).reduce((a, p) => a + p.total, 0))}</td></tr>`).join('')}</tbody></table></div></div></div>`;
     $$('[data-recv]', v).forEach(b => b.onclick = () => { DB.receivePurchase(b.dataset.recv); toast(t('st_received')); render(); });
+    ['lead', 'cover'].forEach(k => { $('#ro_' + k).onchange = (e) => { D().settings[k + 'Days'] = Math.max(1, Math.min(365, parseInt(e.target.value, 10) || (k === 'lead' ? 14 : 30))); DB.save(); render(); }; });
     $('#poadd').onclick = () => poModal([]);
     if ($('#poauto')) $('#poauto').onclick = () => poModal(reorder.map(r => ({ pid: r.p.id, qty: r.qty, val: r.p.cost })));
     $('#supadd').onclick = () => modal({
@@ -832,7 +869,8 @@
       $('#chatQ').blur(); // close the phone keyboard so the answer is visible
       const ctrl = new AbortController(); state.aiBusy = ctrl; state.aiLive = ''; drawLog();
       try {
-        const text = await AI.ask({ messages: state.chat, lang: I18N.lang, days: state.advDays, signal: ctrl.signal, onText: (txt) => { state.aiLive = txt; queuePaint(); } });
+        const text = await AI.ask({ messages: state.chat, lang: I18N.lang, days: state.advDays, signal: ctrl.signal, onText: (txt) => { state.aiLive = txt; queuePaint(); },
+          onTool: (name) => { const el = $('#liveMsg'); if (el && !state.aiLive) el.innerHTML = `<div class="typing"><i></i><i></i><i></i> ${t('looking_up')}: ${esc(t('t_' + name))}…</div>`; } });
         state.chat.push({ role: 'assistant', content: text });
       } catch (e) {
         if (state.aiLive && e && e.name === 'APIUserAbortError') state.chat.push({ role: 'assistant', content: state.aiLive });
@@ -872,7 +910,7 @@
           // Rebuilding the whole report iframe while the AI writes is too heavy for phones:
           // show progress in the status line and rebuild the report once, at the end.
           try {
-            const text = await AI.ask({ messages: [{ role: 'user', content: prompt }], lang, days, onText: (txt) => { const st = $('#repStatus', el); if (st) st.innerHTML = `<span class="typing"><i></i><i></i><i></i></span> ${t('thinking')} · ${txt.length.toLocaleString()}`; } });
+            const text = await AI.ask({ messages: [{ role: 'user', content: prompt }], lang, days, tools: false, onText: (txt) => { const st = $('#repStatus', el); if (st) st.innerHTML = `<span class="typing"><i></i><i></i><i></i></span> ${t('thinking')} · ${txt.length.toLocaleString()}`; } });
             aiHTML = AI.md(text); draw(); $('#repStatus', el).textContent = '✓';
           } catch (e) { $('#repStatus', el).textContent = '⚠️ ' + AI.explainError(e, lang); aiBtn.disabled = false; }
         };
@@ -892,12 +930,12 @@
         <div class="card"><div class="card-h"><h3>${t('business_info')}</h3></div><div class="card-b">
           <div class="form-grid">${f('name', t('business_name'))}${f('tagline', t('tagline'))}${f('phone', t('phone'))}${f('email', t('email'), 'email')}${f('address', t('address'))}${f('cr', t('cr_no'))}${f('vat', t('vat_rate'), 'number')}${f('currency', 'Currency')}</div>
           <h3 style="margin:22px 0 12px;font-size:15px">${icon('store')} ${t('store_settings')}</h3>
-          <div class="form-grid">${f('whatsapp', t('whatsapp_no'))}${f('instagram', 'Instagram')}${f('maps', 'Google Maps link')}${f('siteUrl', t('site_url'))}${f('rating', 'Google rating')}${f('followers', 'Instagram followers')}
+          <div class="form-grid">${f('whatsapp', t('whatsapp_no'))}${f('instagram', 'Instagram')}${f('maps', 'Google Maps link')}${f('siteUrl', t('site_url'))}${f('rating', 'Google rating')}${f('followers', 'Instagram followers')}<div class="field full"><label>${I18N.lang === 'ar' ? 'رابط مساعد القطع بالذكاء الاصطناعي (اختياري، https)' : 'AI parts assistant URL (optional, https)'}</label><input class="input" id="st_aiEndpoint" dir="ltr" placeholder="https://assistant.example.workers.dev" value="${esc(s.aiEndpoint || '')}"><p class="faint" style="font-size:12px;margin:4px 0 0">${I18N.lang === 'ar' ? 'بدونه يعمل مساعد القطع في المتجر بمحرك مدمج. لإجابات Claude انشر worker/assistant-proxy.js وضع رابطه هنا ثم انشر الموقع.' : 'Without it, the store\'s parts assistant uses its built-in engine. For Claude answers, deploy worker/assistant-proxy.js, paste its URL here, then publish.'}</p></div>
             <div class="field full"><label class="check"><input type="checkbox" id="st_showStock" ${s.showStock ? 'checked' : ''}> ${t('show_stock')}</label></div></div>
           <h3 style="margin:22px 0 12px;font-size:15px">${icon('card')} Qpay</h3>
           <div class="form-grid"><div class="field"><label>${t('qp_limit')} (${s.currency})</label><input class="input num" type="number" id="st_qlimit" value="${s.qpay.limit}"></div><div class="field"><label>${t('qp_fee')} %</label><input class="input num" type="number" step="0.1" id="st_qfee" value="${s.qpay.feePct}"></div>
             <div class="field"><label>${t('qp_merchant')}</label><input class="input" id="st_qmid" value="${esc(s.qpay.merchantId)}"></div><div class="field"><label>${t('qp_link')}</label><input class="input" id="st_qlink" value="${esc(s.qpay.payLink)}"></div></div>
-          <div class="actions mt"><button class="btn primary" id="st_save">${icon('check')}${t('save')}</button><a class="btn" href="index.html?preview" target="_blank" rel="noopener">${icon('external')}${t('preview_store')}</a></div></div></div>
+          <div class="actions mt"><button class="btn primary" id="st_save">${icon('check')}${t('save')}</button><a class="btn" href="index.html?preview" target="_blank" rel="noopener" id="st_prev">${icon('external')}${t('preview_store')}</a></div></div></div>
         <div>
           <div class="card"><div class="card-h"><h3>${t('language')} & ${t('theme')}</h3></div><div class="card-b">
             <div class="field"><label>${t('language')}</label><div class="seg" id="st_lang"><button data-k="en" class="${I18N.lang === 'en' ? 'on' : ''}">English</button><button data-k="ar" class="${I18N.lang === 'ar' ? 'on' : ''}">العربية</button></div></div>
@@ -905,13 +943,19 @@
           <div class="card mt"><div class="card-h"><h3>${icon('sparkle')} ${t('ai_key')}</h3>${AI.getKey() ? `<span class="pill s-delivered">ON</span>` : ''}</div><div class="card-b">
             <p class="muted" style="margin:0 0 10px">${t('ai_key_help')}</p>
             <div class="actions"><input class="input" id="st_key" type="password" autocomplete="off" placeholder="${AI.getKey() ? '•••••••• ' + esc(AI.getKey().slice(-4)) : 'sk-ant-…'}" style="flex:1;min-width:180px"><button class="btn primary" id="st_keysave">${t('save')}</button>${AI.getKey() ? `<button class="btn danger" id="st_keyrm">${t('remove_key')}</button>` : ''}</div></div></div>
+          <div class="card mt" id="secCard"><div class="card-h"><h3>${icon('shield')} ${t('security')}</h3><button class="btn sm" id="sec_lock">${icon('lock')}${t('lock_now')}</button></div><div class="card-b">
+            <p class="muted" style="margin:0 0 12px;font-size:13px">${t('sec_note')}</p>
+            <div class="field"><label>${t('auto_lock')}</label><select class="input" id="sec_auto" style="max-width:200px">${[5, 15, 30, 60, 240].map(m => `<option value="${m}" ${s.autoLockMin === m ? 'selected' : ''}>${m} ${t('minutes')}</option>`).join('')}</select></div>
+            <form id="sec_pw" class="form-grid mt" autocomplete="off"><input type="text" name="username" value="admin" autocomplete="username" hidden><div class="field full"><label>${t('cur_pw')}</label><input class="input" type="password" id="sec_cur" autocomplete="current-password"></div><div class="field"><label>${t('new_pw')}</label><input class="input" type="password" id="sec_new" autocomplete="new-password" minlength="8"></div><div class="field"><label>${t('confirm_pw')}</label><input class="input" type="password" id="sec_new2" autocomplete="new-password"></div>
+              <div class="field full"><div class="actions"><button class="btn primary" type="submit" id="sec_go">${t('change_pw')}</button><span id="sec_msg" class="muted" style="font-size:13px"></span></div></div></form></div></div>
           ${H.publishCard()}
           <div class="card mt"><div class="card-h"><h3>${t('data_mgmt')}</h3></div><div class="card-b">
             <div class="notice">${icon('alert')}<div>${t('unpaid_note')}</div></div>
-            <div class="actions mt"><button class="btn" id="st_bk">${icon('download')}${t('backup')}</button><label class="btn">${icon('upload')}${t('restore')}<input type="file" id="st_rs" accept=".json,application/json" hidden></label><button class="btn danger" id="st_reset">${icon('refresh')}${t('reset_demo')}</button>${D().demo ? `<button class="btn primary" id="st_fresh">${icon('check')}${t('start_fresh')}</button>` : ''}</div>${D().demo ? `<p class="faint" style="font-size:12.5px;margin:8px 0 0">${t('start_fresh_help')}</p>` : ''}</div></div>
+            <div class="actions mt"><button class="btn ghost danger" id="st_erase">${icon('trash')}${t('erase_all')}</button><button class="btn" id="st_bk">${icon('download')}${t('backup')}</button><label class="btn">${icon('upload')}${t('restore')}<input type="file" id="st_rs" accept=".json,application/json" hidden></label><button class="btn danger" id="st_reset">${icon('refresh')}${t('reset_demo')}</button>${D().demo ? `<button class="btn primary" id="st_fresh">${icon('check')}${t('start_fresh')}</button>` : ''}</div>${D().demo ? `<p class="faint" style="font-size:12.5px;margin:8px 0 0">${t('start_fresh_help')}</p>` : ''}</div></div>
         </div>
       </div>`;
-    $('#st_save').onclick = () => { ['name', 'tagline', 'phone', 'email', 'address', 'cr', 'currency', 'whatsapp', 'instagram', 'maps', 'siteUrl', 'rating', 'followers'].forEach(k => s[k] = $('#st_' + k).value.trim()); s.whatsapp = s.whatsapp.replace(/[^\d]/g, ''); if (s.siteUrl && !s.siteUrl.endsWith('/')) s.siteUrl += '/'; s.vat = Math.max(0, parseFloat($('#st_vat').value) || 0); s.showStock = $('#st_showStock').checked; s.qpay.limit = Math.max(0, parseFloat($('#st_qlimit').value) || 0); s.qpay.feePct = Math.max(0, parseFloat($('#st_qfee').value) || 0); s.qpay.merchantId = $('#st_qmid').value.trim(); s.qpay.payLink = $('#st_qlink').value.trim(); DB.save(); toast(t('saved')); render(); };
+    $('#st_save').onclick = () => { ['name', 'tagline', 'phone', 'email', 'address', 'cr', 'currency', 'whatsapp', 'instagram', 'maps', 'siteUrl', 'rating', 'followers'].forEach(k => s[k] = $('#st_' + k).value.trim()); s.whatsapp = s.whatsapp.replace(/[^\d]/g, ''); if (s.siteUrl && !s.siteUrl.endsWith('/')) s.siteUrl += '/'; s.vat = Math.max(0, parseFloat($('#st_vat').value) || 0); s.showStock = $('#st_showStock').checked; s.qpay.limit = Math.max(0, parseFloat($('#st_qlimit').value) || 0); s.qpay.feePct = Math.max(0, parseFloat($('#st_qfee').value) || 0); s.qpay.merchantId = $('#st_qmid').value.trim(); s.qpay.payLink = /^https:\/\//.test($('#st_qlink').value.trim()) ? $('#st_qlink').value.trim() : ''; const ae = $('#st_aiEndpoint').value.trim(); s.aiEndpoint = /^https:\/\/[^\s"'<>]+$/.test(ae) ? ae : ''; ['maps', 'siteUrl'].forEach(k => { if (s[k] && !/^https:\/\//.test(s[k])) s[k] = ''; }); DB.save(); toast(t('saved')); render(); };
+    $('#st_prev').onclick = () => H.writePreview && H.writePreview();
     $('#st_keysave').onclick = () => { const k = $('#st_key').value.trim(); if (!k) return; AI.setKey(k); toast(t('saved')); render(); };
     if ($('#st_keyrm')) $('#st_keyrm').onclick = () => { AI.setKey(''); toast(t('deleted')); render(); };
     bindSeg('st_lang', k => setLang(k));
@@ -921,6 +965,18 @@
     $('#st_reset').onclick = () => confirmBox(t('reset_demo') + '?', () => { DB.reset(); state.cart = []; toast(t('saved')); render(); });
     if ($('#st_fresh')) $('#st_fresh').onclick = () => confirmBox(t('start_fresh_help'), () => { DB.startFresh(); state.cart = []; toast(t('saved')); render(); });
     H.bindPublish(v);
+    $('#st_erase').onclick = () => { const typed = prompt(t('erase_q')); if (typed === 'ERASE' && window.Auth) Auth.eraseAll(); };
+    if ($('#sec_lock')) $('#sec_lock').onclick = () => window.Auth && Auth.lock();
+    $('#sec_auto').onchange = (e) => { s.autoLockMin = +e.target.value; DB.save(); toast(t('saved')); };
+    $('#sec_pw').onsubmit = async (e) => {
+      e.preventDefault();
+      const msg = $('#sec_msg'), cur = $('#sec_cur').value, nw = $('#sec_new').value;
+      if (nw !== $('#sec_new2').value) { msg.textContent = t('pw_mismatch'); return; }
+      $('#sec_go').disabled = true; msg.innerHTML = '<span class="typing"><i></i><i></i><i></i></span>';
+      try { await Auth.changePassword(cur, nw); msg.textContent = '✓ ' + t('pw_changed'); $('#sec_pw').reset(); toast(t('pw_changed')); }
+      catch (er) { msg.textContent = '⚠️ ' + er.message; }
+      $('#sec_go').disabled = false;
+    };
   }
 
   function setLang(l) { D().settings.lang = l; DB.save(); I18N.set(l); render(); }
@@ -943,4 +999,4 @@
   // live update when an order arrives from the storefront in another tab
   window.addEventListener('db:change', (e) => { if (e.detail && e.detail.external && !document.querySelector('.overlay')) { render(); if (route !== 'pos') toast(I18N.lang === 'ar' ? 'تم تحديث البيانات' : 'New activity received'); } });
   go();
-})();
+});
