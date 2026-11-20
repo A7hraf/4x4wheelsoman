@@ -21,7 +21,7 @@ export async function fakeFetch(url, opts = {}) {
     const items = p === 1 ? [
       { sku: 'rs 100', name: 'Rock Slider (other shop)', url_key: 'rock-slider-x', url_suffix: '', stock_status: 'IN_STOCK', small_image: { url: 'https://mag.example/i.jpg' }, price_range: { minimum_price: { final_price: { value: 900, currency: 'AED' }, regular_price: { value: 950 } } } },
       { sku: 'W-9', name: 'Winch', url_key: 'winch', url_suffix: '', stock_status: 'OUT_OF_STOCK', small_image: null, price_range: { minimum_price: { final_price: { value: 2500, currency: 'AED' }, regular_price: { value: 2500 } } } }
-    ] : [{ sku: 'B-1', name: 'Bumper', url_key: 'bumper', url_suffix: '', stock_status: 'IN_STOCK', small_image: null, price_range: { minimum_price: { final_price: { value: 1800, currency: 'AED' }, regular_price: { value: 1800 } } } }];
+    ] : [null, { sku: 'B-1', name: 'Bumper', url_key: 'bumper', url_suffix: '', stock_status: 'IN_STOCK', small_image: null, price_range: { minimum_price: { final_price: { value: 1800, currency: 'AED' }, regular_price: { value: 1800 } } } }];
     return json({ data: { products: { total_count: 3, page_info: { total_pages: 2 }, items } } });
   }
   if (['manual.example', 'titanperformanceuae.com', 'www.ramyautomotive.com'].includes(u.host)) return new Response('<html>blocked</html>', { status: 403 });

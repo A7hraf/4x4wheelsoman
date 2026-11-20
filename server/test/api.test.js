@@ -210,16 +210,22 @@ test('supplier detection and catalogue sync (Shopify + Magento), price-change tr
   fakeUpstream.calls = [];
   assert.equal((await call('POST', '/api/suppliers/detect', { url: 'https://redir.example/' }, T.owner)).body.platform, 'manual');
   assert.ok(!fakeUpstream.calls.some(c => c.url.includes('10.0.0.5')), 'redirect to an internal address is not followed');
+  // after the data was moved online, the owner's four suppliers were added and catalogs copied by themselves
+  let st;
+  for (let i = 0; i < 100; i++) { st = (await call('GET', '/api/suppliers/stats', null, T.owner)).body.stats; if (['sA', 'sB', 'sup_amwrangler', 'sup_offroadzone'].every(id => st[id] && st[id].items && !st[id].running)) break; await new Promise(r => setTimeout(r, 100)); }
+  assert.equal(st.sA.items, 3); assert.equal(st.sup_offroadzone.items, 3, 'null entries in the Magento feed are skipped');
+  const sups = (await call('GET', '/api/state', null, T.owner)).body.data.suppliers.map(x => x.name);
+  for (const n of ['AM Wrangler', 'Offroad Zone', 'Titan Performance', 'Ramy Automotive']) assert.ok(sups.includes(n), n);
   const a = await call('POST', '/api/suppliers/sA/sync', {}, T.owner);
   assert.equal(a.status, 200, JSON.stringify(a.body)); assert.equal(a.body.total, 3);
   const b = await call('POST', '/api/suppliers/sB/sync', {}, T.owner);
   assert.equal(b.body.total, 3);
   assert.equal((await call('POST', '/api/suppliers/sC/sync', {}, T.owner)).status, 400);
   const q = (await call('GET', '/api/catalog?q=rock slider', null, T.owner)).body;
-  const rs = q.items.find(i => i.sku === 'RS-100');
+  const rs = q.items.find(i => i.sku === 'RS-100' && i.supplierId === 'sA');
   assert.equal(rs.price, 1000); assert.equal(rs.url, 'https://shop.example/products/rock-slider?variant=1');
-  assert.equal(rs.also[0].supplierId, 'sB', 'same part found at the other supplier'); assert.equal(rs.also[0].price, 900);
-  const led = (await call('GET', '/api/catalog?q=LED&avail=1', null, T.owner)).body.items;
+  const sb = rs.also.find(x => x.supplierId === 'sB'); assert.ok(sb, 'same part found at the other supplier'); assert.equal(sb.price, 900);
+  const led = (await call('GET', '/api/catalog?q=LED&avail=1&supplier=sA', null, T.owner)).body.items;
   assert.deepEqual(led.map(i => i.sku), ['LB-2']);
   globalThis.__rsPrice = '1100.00';
   await call('POST', '/api/suppliers/sA/sync', {}, T.owner);
