@@ -75,7 +75,7 @@ export async function fetchShopify(site, fetchImpl, onPage) {
 }
 
 // ---- Magento 2 (GraphQL) ----
-const MAGENTO_Q = `query($p:Int!){products(search:"",pageSize:100,currentPage:$p){total_count page_info{total_pages} items{sku name url_key url_suffix stock_status small_image{url} price_range{minimum_price{final_price{value currency} regular_price{value}}}}}}`;
+const MAGENTO_Q = `query($p:Int!){products(search:"",pageSize:100,currentPage:$p){total_count page_info{total_pages} items{sku name url_key stock_status small_image{url} price_range{minimum_price{final_price{value currency} regular_price{value}}}}}}`;
 export function magentoEndpoint(site) {
   const b = base(site);
   // offroad-zone.com/en → offroad-zone.com/en/graphql (store view in the path)
@@ -93,11 +93,11 @@ export async function fetchMagento(site, fetchImpl, onPage) {
     for (const it of res.items || []) {
       const mp = it.price_range && it.price_range.minimum_price;
       const fp = mp && mp.final_price, rp = mp && mp.regular_price;
-      const suffix = it.url_suffix != null ? it.url_suffix : '/';
+      const suffix = '/'; // offroad-zone.com: /en/<url_key>/
       items.push({
         sku: String(it.sku || '').trim() || it.url_key, title: it.name || it.sku, vendor: '', ptype: '', tags: '',
         price: fp ? Number(fp.value) || 0 : 0, compare_at: rp && fp && rp.value > fp.value ? Number(rp.value) : null, currency: fp && fp.currency,
-        available: it.stock_status === 'IN_STOCK', url: it.url_key ? `${b}/${it.url_key}${suffix || ''}` : b,
+        available: it.stock_status === 'IN_STOCK', url: it.url_key ? `${b}/${it.url_key}${suffix}` : b,
         image: (it.small_image && it.small_image.url && !/placeholder/i.test(it.small_image.url)) ? it.small_image.url : ''
       });
     }
