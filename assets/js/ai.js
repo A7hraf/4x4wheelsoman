@@ -15,8 +15,13 @@
   const sod = (ts) => { const d = new Date(ts); d.setHours(0, 0, 0, 0); return d.getTime(); };
 
   // The key lives inside the encrypted admin database (see auth.js), never in plain localStorage.
-  const getKey = () => ((D() && D().secrets) || {}).aiKey || '';
-  const setKey = (k) => { D().secrets.aiKey = (k || '').trim(); DB.save(); };
+  // Online mode: the key is kept on the server and every AI call goes through it (remote.js).
+  const online = () => !!(window.Auth && Auth.mode === 'server');
+  const getKey = () => online() ? (Auth.inbox().ai ? 'server-key' : '') : (((D() && D().secrets) || {}).aiKey || '');
+  const setKey = (k) => {
+    if (online()) return Auth.api('PUT', '/api/secrets', { aiKey: (k || '').trim() }).then(r => { Auth.inbox().ai = r.hasAiKey; if (window.BH && BH.render) BH.render(); }).catch(e => alert(e.message));
+    D().secrets.aiKey = (k || '').trim(); DB.save();
+  };
 
   // ---------- numbers ----------
   const rev = () => D().sales.filter(DB.countsAsRevenue);
@@ -239,6 +244,7 @@ Reply in ${lang === 'ar' ? 'Arabic' : 'the same language the owner writes in (Ar
     const apiKey = getKey();
     if (!apiKey) throw new Error('NO_KEY');
     const Anthropic = await loadSDK();
+    if (online()) return new Anthropic({ apiKey: Auth.token(), baseURL: Auth.API + '/api/ai', dangerouslyAllowBrowser: true, maxRetries: 2 });
     return new Anthropic({ apiKey, dangerouslyAllowBrowser: true, maxRetries: 2 });
   }
 

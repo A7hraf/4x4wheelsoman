@@ -486,7 +486,7 @@ test('every screen fits phones and tablets without sideways scrolling', async ({
     await offline(ctx);
     const page = await ctx.newPage();
     await setupAdmin(page);
-    for (const r of ['dashboard', 'pos', 'quotes', 'orders', 'inventory', 'purchases', 'whatsapp', 'advisor', 'qpay', 'finance', 'reports', 'customers', 'settings']) {
+    for (const r of ['dashboard', 'pos', 'quotes', 'orders', 'inventory', 'purchases', 'whatsapp', 'advisor', 'qpay', 'finance', 'reports', 'customers', 'suppliers', 'sourcing', 'settings']) {
       await go(page, r);
       await expect(page.locator('#view > *:visible').first()).toBeVisible();
       expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth), `${r} @${vp.width}`).toBeLessThanOrEqual(0);

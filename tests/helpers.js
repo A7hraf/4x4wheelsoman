@@ -7,6 +7,8 @@ const API_KEY = 'sk-ant-test-0000000000000000';
 // Offline: Google Fonts are not needed for the tests.
 async function offline(context) {
   await context.route(/fonts\.(googleapis|gstatic)\.com/, r => r.fulfill({ body: '', contentType: 'text/css' }));
+  // the on-device mode (no server) unless a test points config.js at a server
+  await context.route('**/assets/js/config.js', r => r.fulfill({ contentType: 'application/javascript', body: "window.X4W_API = '';" }));
 }
 
 // Collect page errors, console errors and CSP violations so every test can assert "no errors".

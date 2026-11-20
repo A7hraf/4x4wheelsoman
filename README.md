@@ -34,6 +34,17 @@ A static website (no server needed) hosted on **GitHub Pages**.
 - **Qpay**: a pipeline for installment orders (To request → Requested → Approved → Settled / Declined), a 4-payment schedule, a limit check (OMR 500), merchant-fee tracking, and the request message sent on WhatsApp.
 - **Publish to website**: push product, price and setting changes to the live store with one click, using a GitHub token. You can also download `catalog.js` and upload it to `assets/js/` yourself.
 
+## Suppliers, team and approvals (online server)
+The dashboard now runs on a small server (`server/`, hosted on Railway) so the owner and employees share the same data from any phone or computer.
+- **Suppliers**: one page per supplier with what to buy now (customer orders that were sold but are not in stock, plus restock suggestions), supplier orders (send by WhatsApp/email, or open a ready cart on Shopify shops), history, linked products and *How to buy* notes (contact, payment terms, delivery time, currency, VAT, shipping %, default margin). Receiving a supplier order puts stock up and sends items straight to the waiting customer orders.
+- **Supplier catalog**: AM Wrangler (Shopify) and Offroad Zone (Magento) catalogs are copied every night (and on demand) so you can search them, see stock and price, compare the same part number at both, and *Add to my products* with a margin → selling price calculator (supplier price × VAT × exchange rate × shipping %). Titan Performance and Ramy Automotive don't offer open product lists, so their products are added from a link and price. *Price changes* shows supplier price moves and flags products you sell.
+- Every sale records which supplier each item comes from; add, change or remove suppliers at any time.
+- **Team**: create employee accounts with a permission level per section (no access / view / ask approval / edit / full), plus "can see costs", "can download data" and a discount limit. Ready roles: Cashier, Sales, Store keeper, Manager. See each person's sales, orders handled, quotes, supplier orders, requests and a full activity log. Switching an account off signs it out at once.
+- **Approvals**: changes from employees with *ask approval* (and deletes, cancellations and refunds from *edit*) wait in the owner's inbox with a before/after view.
+- Permissions are enforced on the server, not only in the screen. The Claude key and GitHub token are stored encrypted on the server; employees' AI requests go through it, so the key never reaches a browser.
+
+First time online: open the dashboard, enter the **setup code** you were given, create the owner account, then choose *Upload the data on this device* (with your old dashboard password), a backup file, your catalog or demo data. Server details: `server/README.md`. Setting `assets/js/config.js` back to `''` returns to the old single-device mode.
+
 ## First-time setup
 1. Open the admin page and **create your admin password** (at least 8 characters; there is no way to recover it — keep it safe). Existing dashboard data on that browser is kept and encrypted.
 2. Open **Admin → Settings**. Check the business details and WhatsApp number. Click **Start fresh** to remove the demo orders and demo prices.
@@ -55,12 +66,10 @@ A static website (no server needed) hosted on **GitHub Pages**.
 The store assistant works without any setup. To have Claude answer customers, deploy the small Cloudflare Worker in `worker/` (free plan is enough). It keeps your API key secret, only answers your website, rate-limits each visitor and only recommends products from your published catalog. Then paste its URL in **Settings → AI parts assistant URL** and click **Publish**. See `worker/README.md`. Never put an API key in the website itself.
 
 ## Tests
-End-to-end tests (Playwright) cover the store, every dashboard workflow, the AI features (with a fake Claude API), login and security:
+End-to-end tests (Playwright) cover the store, every dashboard workflow, the AI features (with a fake Claude API), login and security, and the online mode (owner, cashier and store keeper on the real server with fake supplier websites):
 ```
-cd tests
-npm install
-npx playwright install chromium
-npm test
+cd server && npm install && npm test     # API: permissions, approvals, sync, suppliers, security
+cd ../tests && npm install && npx playwright install chromium && npm test
 ```
 
 ## Notes

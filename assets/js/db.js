@@ -218,6 +218,12 @@
   const supplier = (id) => db.suppliers.find(s => s.id === id);
   const vehicle = (id) => (db.vehicles || []).find(v => v.id === id);
 
+  // A product can be bought from several suppliers; the preferred one (or the first) is used for new orders.
+  function preferredSource(p) {
+    const list = (p && p.sources) || [];
+    const active = list.filter(x => { const su = supplier(x.supplierId); return !su || su.active !== false; }); // unknown = not visible to this person
+    return active.find(x => x.preferred) || active[0] || (p && p.supplierId ? { supplierId: p.supplierId } : null);
+  }
   function nextNo(prefix, start) {
     let max = start;
     db.sales.concat(db.purchases, db.quotes || []).forEach(s => { if (s.no && s.no.startsWith(prefix)) { const n = parseInt(s.no.slice(prefix.length), 10); if (n > max) max = n; } });
@@ -231,7 +237,14 @@
   }
   function createSale(o) {
     const vatRate = Number(db.settings.vat) || 0;
-    const items = o.items.map(it => { const p = product(it.pid); return { pid: it.pid, name: p.name, sku: p.partNumber || p.sku, qty: it.qty, price: it.price != null ? r3(it.price) : p.price, cost: p.cost || 0 }; });
+    // For each line: which supplier it comes from, and how many are not in stock and must be bought.
+    const items = o.items.map(it => {
+      const p = product(it.pid); const src = preferredSource(p);
+      const line = { pid: it.pid, name: p.name, sku: p.partNumber || p.sku, qty: it.qty, price: it.price != null ? r3(it.price) : p.price, cost: p.cost || 0 };
+      const free = Math.max(0, p.stock || 0); if (it.qty > free) line.toBuy = it.qty - free;
+      if (src) { line.supplierId = src.supplierId; if (src.sku) line.supSku = src.sku; }
+      return line;
+    });
     const subtotal = r3(items.reduce((s, it) => s + it.qty * it.price, 0));
     const discount = r3(Math.min(o.discount || 0, subtotal));
     const shippingFee = r3(o.shippingFee || 0);
@@ -278,7 +291,15 @@
   function receivePurchase(id) {
     const po = db.purchases.find(p => p.id === id); if (!po || po.status === 'received') return;
     po.status = 'received'; po.receivedAt = Date.now();
-    po.items.forEach(it => { const p = product(it.pid); if (p) p.cost = it.cost; adjustStock(it.pid, it.qty, 'purchase', po.no); });
+    po.items.forEach(it => {
+      const p = product(it.pid); if (p) p.cost = it.cost; adjustStock(it.pid, it.qty, 'purchase', po.no);
+      // items bought for customers who already paid/ordered go straight to them, not to the shelf
+      (it.forSales || []).forEach(f => {
+        const s = db.sales.find(x => x.id === f.id); if (!s) return;
+        adjustStock(it.pid, -f.qty, 'sale', s.no, 'Arrived for customer order');
+        s.items.forEach(li => { if (li.pid === it.pid && li.poId === po.id) li.arrived = Date.now(); });
+      });
+    });
     db.expenses.push({ id: uid('e'), date: Date.now(), category: 'inventory', desc: 'Stock purchase ' + po.no, amount: po.total, method: 'transfer', ref: po.id });
     save();
   }
@@ -313,6 +334,6 @@
     load, init, save, replace, setPersist, buildSeed, reset, startFresh, exportJSON, importJSON, uid, r3, DAY, GOVERNORATES, DEFAULT_TEMPLATES, KEY,
     get data() { return db; },
     product, customer, supplier, vehicle, createSale, setOrderStatus, setQpay, returnItems, adjustStock, receivePurchase, findOrCreateCustomer, logWA,
-    countsAsRevenue, netSales, cogs, nextNo
+    countsAsRevenue, netSales, cogs, nextNo, preferredSource
   };
 })(window);
