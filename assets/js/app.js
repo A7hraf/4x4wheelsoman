@@ -284,8 +284,11 @@
   }
 
   function go() {
-    const h = location.hash.replace(/^#\/?/, '') || 'dashboard';
-    route = ROUTES.find(r => r.id === h) ? h : 'dashboard';
+    // #/route or #/route/sub (e.g. #/suppliers/s1)
+    const full = location.hash.replace(/^#\/?/, '') || 'dashboard';
+    const h = full.split(/[/?]/)[0];
+    route = ROUTES.find(r => r.id === h) ? h : (ROUTES[0] ? ROUTES[0].id : 'dashboard');
+    state.sub = route === h ? decodeURIComponent(full.slice(h.length + 1)) : '';
     $('#app').classList.remove('nav-open'); setMore(false); document.documentElement.classList.remove('search-open');
     $$('.overlay').forEach(o => o.parentNode && o.parentNode.removeChild(o));
     render();
@@ -325,6 +328,7 @@
     add(unpaid.length, 'warn', 'wallet', t('td_unpaid'), '#/orders', t('open'), money(unpaid.reduce((a, x) => a + x.total, 0), 0));
     const plan = AI.reorderPlan();
     add(plan.filter(r => r.urgent).length, 'bad', 'truck', t('td_reorder'), '#/purchases', t('make_po'), money(plan.filter(r => r.urgent).reduce((a, x) => a + x.cost, 0), 0));
+    if (H.extraTodo) H.extraTodo(add);
     return out;
   }
   function commandCentre() {
@@ -505,7 +509,7 @@
         <dl class="kv"><dt>${t('customer')}</dt><dd>${esc(s.customerName)}</dd><dt>${t('phone')}</dt><dd>${esc(s.phone || '—')}</dd>${online ? `<dt>${t('city')}</dt><dd>${esc(s.city || '—')}</dd><dt>${t('address')}</dt><dd>${esc(s.address || '—')}</dd>` : ''}${s.note ? `<dt>${t('note')}</dt><dd>${esc(s.note)}</dd>` : ''}</dl>
       </div>
       <div class="card mt" style="box-shadow:none"><div class="table-wrap"><table class="t"><thead><tr><th>${t('product')}</th><th class="r">${t('qty')}</th><th class="r">${t('price')}</th><th class="r">${t('total')}</th></tr></thead><tbody>
-        ${s.items.map(it => `<tr><td><div class="strong">${esc(it.name)}</div><div class="faint" style="font-size:12px">${esc(it.sku)}</div></td><td class="r num">${it.qty}</td><td class="r">${money(it.price)}</td><td class="r strong">${money(it.qty * it.price)}</td></tr>`).join('')}
+        ${s.items.map(it => `<tr><td><div class="strong">${esc(it.name)}</div><div class="faint" style="font-size:12px">${esc(it.sku)}</div>${H.lineSource ? H.lineSource(it, s) : ''}</td><td class="r num">${it.qty}</td><td class="r">${money(it.price)}</td><td class="r strong">${money(it.qty * it.price)}</td></tr>`).join('')}
       </tbody></table></div>
       <div class="totals">
         <div class="ln"><span>${t('subtotal')}</span>${money(s.subtotal)}</div>
@@ -514,6 +518,7 @@
         ${s.shippingFee ? `<div class="ln"><span>${t('shipping')}</span>${money(s.shippingFee)}</div>` : ''}
         <div class="ln big"><span>${t('total')}</span>${money(s.total)}</div>
       </div></div>
+      ${H.orderPeople ? H.orderPeople(s) : ''}
       ${online ? `<div class="mt"><div class="field"><label>${t('status')}</label><div class="actions">${flow.concat('cancelled').map(st => `<button class="btn sm ${s.status === st ? 'primary' : ''}" data-set="${st}">${t('st_' + st)}</button>`).join('')}</div></div></div>` : ''}`;
     modal({
       title: `${t('order')} ${esc(s.no)}`, body, wide: true,
@@ -1105,7 +1110,7 @@
   Object.assign(H, { receiptModal, ordersTable, renderShell, D, t, $, $$, esc, fmt, money, moneyTxt, big, pct, fDate, fDT, modal, toast, confirmBox, download, csv, kpi, statusPill, payLabel, srcLabel, render: () => render(), state, bindSeg, linesEditor, orderModal, catName, thumb, debounce, range, inRange, summarize, chart, cssVar, rangeSeg, cur });
   const VIEWS = { advisor: viewAdvisor, dashboard: viewDashboard, orders: viewOrders, inventory: viewInventory, purchases: viewPurchases, finance: viewFinance, reports: viewReports, settings: viewSettings }; // pos & customers: admin-pos.js
 
-  (window.BH_EXT || []).forEach(f => f(H, VIEWS, ROUTES));
+  (window.BH_EXT || []).forEach(f => f(H, VIEWS, ROUTES, TABS));
   if (D().settings.theme && !document.documentElement.dataset.theme) document.documentElement.dataset.theme = D().settings.theme;
   // ---------------- boot ----------------
   $('#menuBtn').onclick = () => $('#app').classList.toggle('nav-open');
@@ -1117,6 +1122,6 @@
   };
   window.addEventListener('hashchange', go);
   // live update when an order arrives from the storefront in another tab
-  window.addEventListener('db:change', (e) => { if (e.detail && e.detail.external && !document.querySelector('.overlay')) { render(); if (route !== 'pos') toast(I18N.lang === 'ar' ? 'تم تحديث البيانات' : 'New activity received'); } });
+  window.addEventListener('db:change', (e) => { if (e.detail && e.detail.external && !document.querySelector('.overlay')) { render(); if (route !== 'pos' && !e.detail.own) toast(I18N.lang === 'ar' ? 'تم تحديث البيانات' : 'New activity received'); } });
   go();
 });

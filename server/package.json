@@ -1,0 +1,19 @@
+{
+  "name": "4x4wheelsoman-server",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Business Hub API: shared data, employee accounts and permissions, owner approvals, activity log, supplier catalogue sync and AI proxy",
+  "type": "module",
+  "main": "src/index.js",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "start": "node src/index.js",
+    "test": "node --test test/api.test.js"
+  },
+  "dependencies": {
+    "pg": "^8.23.1"
+  },
+  "devDependencies": {
+    "embedded-postgres": "18.7.0-beta.19"
+  }
+}

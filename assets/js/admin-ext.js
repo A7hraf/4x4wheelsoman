@@ -82,7 +82,10 @@
     // ---------- publishing ----------
     // The GitHub token is kept inside the encrypted admin database (auth.js), not in plain localStorage.
     const getToken = () => (D().secrets || {}).ghToken || '';
-    const setToken = (v) => { D().secrets.ghToken = (v || '').trim(); DB.save(); };
+    const setToken = (v) => {
+      D().secrets.ghToken = (v || '').trim(); DB.save();
+      if (window.Auth && Auth.mode === 'server') Auth.api('PUT', '/api/secrets', { ghToken: D().secrets.ghToken }).catch(e => H.toast(e.message));
+    };
     function buildCatalog(imagePaths) {
       const st = S(), base = window.CATALOG || {};
       const cats = (base.categories || []).map(c => Object.assign({}, c, (D().categories.find(x => x.id === c.id) || {})));

@@ -308,6 +308,21 @@
     resumeSession().then(ok => { if (!ok) mountGate(); });
   }
 
+  // Online mode (assets/js/config.js sets X4W_API): remote.js signs people in instead.
+  // This file then only offers to unlock the data saved on this device, to move it online.
+  if (global.X4W_API) {
+    global.LocalVault = {
+      hasAccount: () => hasAccount() && !!ls.get(VAULT),
+      async decrypt(password) {
+        const a = jget(AUTH, null); if (!a || !subtle) throw new Error('No data on this device');
+        const k = await deriveKey(password, unb64(a.salt), a.iter || ITER);
+        if (await open(k, a.check) !== 'x4w-ok') throw new Error('Wrong password');
+        return JSON.parse(await open(k, ls.get(VAULT)));
+      }
+    };
+    return;
+  }
+
   global.Auth = {
     ready(fn) { if (started) fn(); else onReady.push(fn); },
     lock, changePassword, eraseAll, hasAccount, MIN_LEN,
