@@ -98,8 +98,13 @@ export function createApp({ pool, env = process.env, fetchImpl = globalThis.fetc
   // ---------- data ----------
   on('GET', '/api/state', async ({ u }) => Object.assign(await readState(pool, u), { me: A.publicUser(u) }, await counts(u)));
   on('GET', '/api/changes', async ({ u, q }) => Object.assign(await changesSince(pool, u, String(q.get('since') || '0').replace(/\D/g, '') || '0'), await counts(u), { me: A.publicUser(u) }));
-  on('POST', '/api/sync', async ({ u, b }) => submit(pool, u, b.batch));
-  on('POST', '/api/import', async ({ u, b }) => { owner(u); return { ok: true, count: await importAll(pool, u, b.data) }; });
+  const kick = () => { S.ensureKnown(pool).then(() => S.autoSync(pool, fetchImpl)).catch(e => console.error('auto sync', e.message)); };
+  on('POST', '/api/sync', async ({ u, b }) => {
+    const r = await submit(pool, u, b.batch);
+    if (r.status === 'ok' && (b.batch || []).some(c => c && c.col === 'suppliers' && c.data)) kick();
+    return r;
+  });
+  on('POST', '/api/import', async ({ u, b }) => { owner(u); const count = await importAll(pool, u, b.data); kick(); return { ok: true, count }; });
 
   // ---------- secrets (owner) ----------
   on('GET', '/api/secrets', async ({ u }) => { owner(u); return { ghToken: box.open(await kvGet('ghToken')), hasAiKey: !!(await aiKey()) }; });
@@ -297,7 +302,10 @@ export async function start(env = process.env) {
   const port = Number(env.PORT) || 8080;
   await new Promise(r => server.listen(port, r));
   console.log('Business Hub API listening on', port);
-  if (env.DISABLE_SCHEDULER !== '1') S.startScheduler(pool, globalThis.fetch);
+  if (env.DISABLE_SCHEDULER !== '1') {
+    S.startScheduler(pool, globalThis.fetch);
+    S.ensureKnown(pool).then(() => S.autoSync(pool, globalThis.fetch)).catch(e => console.error('auto sync', e.message));
+  }
   return { server, pool };
 }
 

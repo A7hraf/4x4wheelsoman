@@ -53,10 +53,10 @@ export async function fetchShopify(site, fetchImpl, onPage) {
     const d = await getJSON(fetchImpl, `${b}/products.json?limit=250&page=${page}`);
     const prods = (d && d.products) || [];
     if (!prods.length) break;
-    for (const p of prods) {
+    for (const p of prods.filter(x => x && typeof x === 'object')) {
       const img = (p.images && p.images[0] && p.images[0].src) || '';
       const multi = (p.variants || []).length > 1;
-      for (const v of p.variants || []) {
+      for (const v of (p.variants || []).filter(Boolean)) {
         const sku = String(v.sku || '').trim() || `${p.handle}${multi ? '#' + v.id : ''}`;
         const vImg = v.featured_image && v.featured_image.src;
         items.push({
@@ -90,7 +90,8 @@ export async function fetchMagento(site, fetchImpl, onPage) {
     const res = d && d.data && d.data.products;
     if (!res) break;
     pages = (res.page_info && res.page_info.total_pages) || 1;
-    for (const it of res.items || []) {
+    // Magento sends null for products it can't show (disabled, hidden or broken entries): skip them
+    for (const it of (res.items || []).filter(x => x && typeof x === 'object')) {
       const mp = it.price_range && it.price_range.minimum_price;
       const fp = mp && mp.final_price, rp = mp && mp.regular_price;
       const suffix = '/'; // offroad-zone.com: /en/<url_key>/
@@ -165,6 +166,7 @@ export async function syncSupplier(pool, sup, fetchImpl, user) {
     const res = await saveItems(pool, sup.id, sup.currency || 'AED', items);
     await pool.query('UPDATE sync_runs SET finished_at=$2, ok=true, items=$3, changed=$4 WHERE id=$1', [run, now(), res.total, res.changed]);
     await logActivity(pool, user || null, 'sync', 'suppliers', `Synced ${sup.name}: ${res.total} products, ${res.added} new, ${res.changed} price changes`, { supplierId: sup.id });
+    console.log(`sync ${sup.name}: ${res.total} products, ${res.added} new, ${res.changed} price changes`);
     return Object.assign({ ok: true }, res);
   } catch (e) {
     await pool.query('UPDATE sync_runs SET finished_at=$2, ok=false, error=$3 WHERE id=$1', [run, now(), String(e.message).slice(0, 300)]);
@@ -172,6 +174,44 @@ export async function syncSupplier(pool, sup, fetchImpl, user) {
   } finally { running.delete(sup.id); }
 }
 export const isRunning = (id) => running.has(id);
+
+// The suppliers the owner buys from. They are added to the shop's data automatically (once),
+// and their catalogs are copied straight away, so products are there without any setup.
+export const KNOWN = [
+  { id: 'sup_amwrangler', name: 'AM Wrangler', website: 'https://am-wrangler.com', platform: 'shopify', currency: 'AED', addVatPct: 0, country: 'UAE', howToOrder: 'Shopify online shop. Use "Open cart on website" to get a ready cart with the items, or send the list on WhatsApp. Prices on the site are in AED.' },
+  { id: 'sup_offroadzone', name: 'Offroad Zone', website: 'https://www.offroad-zone.com/en', platform: 'magento', currency: 'AED', addVatPct: 5, country: 'UAE', howToOrder: 'Online shop (prices shown without 5% UAE VAT). Order on the website or send the list on WhatsApp.' },
+  { id: 'sup_titan', name: 'Titan Performance', website: 'https://titanperformanceuae.com', platform: 'manual', currency: 'AED', addVatPct: 0, country: 'UAE', howToOrder: 'The website shows prices that may not be accurate. Confirm price and stock by WhatsApp/phone before ordering. Add products by pasting the product link and the confirmed price.' },
+  { id: 'sup_ramy', name: 'Ramy Automotive', website: 'https://www.ramyautomotive.com', platform: 'manual', currency: 'AED', addVatPct: 0, country: 'UAE', howToOrder: 'Add products by pasting the product link and price. Confirm stock before ordering.' }
+].map(k => Object.assign({ fxRate: 0, shippingPct: 10, fixedFee: 0, leadDays: 7, defaultMarkup: 35, roundTo: 1, active: true, contact: '', phone: '', whatsapp: '', email: '', paymentTerms: '', minOrder: 0, notes: '' }, k));
+const hostOf = (u) => { try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return ''; } };
+export async function ensureKnown(pool) {
+  const n = (await pool.query('SELECT COUNT(*)::int AS n FROM rows')).rows[0].n;
+  if (!n) return [];
+  const done = await pool.query("SELECT value FROM kv WHERE key='knownSuppliers'");
+  if (done.rows.length) return [];
+  const have = await supplierRows(pool); const added = [];
+  for (const k of KNOWN) {
+    if (have.some(s => s && hostOf(s.website) === hostOf(k.website))) continue;
+    await pool.query("INSERT INTO rows (col,id,data,updated_at,updated_by) VALUES ('suppliers',$1,$2,$3,'system') ON CONFLICT (col,id) DO NOTHING", [k.id, JSON.stringify(k), now()]);
+    added.push(k.name);
+  }
+  // only once: if the owner later deletes one, it is not added back
+  await pool.query("INSERT INTO kv (key,value) VALUES ('knownSuppliers', $1) ON CONFLICT (key) DO NOTHING", [JSON.stringify({ at: now(), added })]);
+  if (added.length) await logActivity(pool, null, 'team', 'suppliers', 'Added your suppliers: ' + added.join(', '));
+  return added;
+}
+// Copy the catalog of every automatic supplier that has none yet (runs in the background).
+let autoRunning = false;
+export async function autoSync(pool, fetchImpl) {
+  if (autoRunning) return; autoRunning = true;
+  try {
+    const counts = new Map((await pool.query('SELECT supplier_id, COUNT(*)::int AS n FROM supplier_items GROUP BY 1')).rows.map(r => [r.supplier_id, r.n]));
+    for (const s of await supplierRows(pool)) {
+      if (!s || s.active === false || !['shopify', 'magento'].includes(s.platform) || counts.get(s.id) || running.has(s.id)) continue;
+      try { await syncSupplier(pool, s, fetchImpl); } catch (e) { console.error(e.message); }
+    }
+  } finally { autoRunning = false; }
+}
 
 export async function supplierRows(pool) {
   const r = await pool.query("SELECT data FROM rows WHERE col='suppliers' AND NOT deleted");
