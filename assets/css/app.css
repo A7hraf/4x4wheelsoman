@@ -850,3 +850,13 @@ html[data-sync="offline"] #pageTitle::after, html[data-sync="error"] #pageTitle:
   .perm-t.t-cards tbody td.c::before { content: attr(data-label); font-size: 9.5px; letter-spacing: 0; color: var(--text-3); position: static; width: auto; text-align: center; line-height: 1.2; min-height: 2.4em; display: flex; align-items: flex-end; justify-content: center; }
   .perm-t.t-cards tbody td.c { width: auto; }
 }
+.sync-strip { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0; }
+.ss-item { display: flex; align-items: center; gap: 8px; padding: 6px 6px 6px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); font-size: 13px; }
+.ss-item span { color: var(--text-2); }
+.src-count { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 10px; font-size: 12.5px; }
+.src-card { position: relative; }
+.src-pick { position: absolute; top: 8px; inset-inline-start: 8px; z-index: 2; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 6px; display: flex; cursor: pointer; box-shadow: var(--shadow); }
+.src-pick input { width: 18px; height: 18px; accent-color: var(--brand); cursor: pointer; margin: 0; }
+.src-card:has(.src-pick input:checked) { border-color: var(--brand); box-shadow: 0 0 0 2px var(--brand-50); }
+.bulk-f { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-2); }
+#bulkBar { flex-wrap: wrap; }
