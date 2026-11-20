@@ -83,20 +83,20 @@ test('owner: first sign-in with the setup code, then start with demo data', asyn
 });
 
 test('owner: adds the real suppliers, syncs AM Wrangler, picks a product with a margin', async () => {
+  // the server adds the owner's four suppliers by itself and copies their catalogs
+  await expect.poll(async () => { await refresh(owner); return owner.evaluate(() => DB.data.suppliers.filter(s => ['AM Wrangler', 'Offroad Zone', 'Titan Performance', 'Ramy Automotive'].includes(s.name)).length); }, { timeout: 20000 }).toBe(4);
+  await expect.poll(() => owner.evaluate(async () => { const st = (await Auth.api('GET', '/api/suppliers/stats')).stats; return Object.values(st).filter(x => x.items && !x.running).length; }), { timeout: 30000 }).toBe(2);
   await go(owner, 'suppliers');
-  await owner.locator('#supKnown').click();
-  await expect(owner.locator('.sup-card', { hasText: 'AM Wrangler' })).toBeVisible();
+  await expect(owner.locator('#supKnown')).toHaveCount(0);
+  await expect(owner.locator('.sup-card', { hasText: 'AM Wrangler' })).toContainText('In catalog');
   await expect(owner.locator('.sup-card', { hasText: 'Ramy Automotive' })).toContainText('Manual');
   await owner.locator('.sup-card', { hasText: 'AM Wrangler' }).click();
   amw = await owner.evaluate(() => DB.data.suppliers.find(s => s.name === 'AM Wrangler').id);
-  await owner.waitForTimeout(600); // let the new supplier reach the server
   await owner.locator('#supSync').click();
   await expect(owner.locator('.toast').filter({ hasText: '3 products' })).toBeVisible({ timeout: 20000 });
-  // sync Offroad Zone too (Magento), so "also at" comparisons work
-  const oz = await owner.evaluate(() => DB.data.suppliers.find(s => s.name === 'Offroad Zone').id);
-  await owner.evaluate(id => Auth.api('POST', `/api/suppliers/${id}/sync`), oz);
-
   await go(owner, 'sourcing');
+  await expect(owner.locator('.sync-strip')).toContainText('AM Wrangler');
+  await expect(owner.locator('.sync-strip')).toContainText('3 products');
   await owner.locator('#srcQ').fill('rock slider');
   await owner.locator('#srcForm button[type=submit]').click();
   const card = owner.locator('.src-card', { hasText: 'RS-100' });
@@ -115,6 +115,22 @@ test('owner: adds the real suppliers, syncs AM Wrangler, picks a product with a 
   productId = p.id;
   await go(owner, 'sourcing'); await owner.locator('[data-tab="mine"]').click();
   await expect(owner.locator('#srcBody')).toContainText('Rock Slider');
+
+  // pick several products at once and add them with one margin
+  await owner.locator('[data-tab="search"]').click();
+  await owner.locator('#srcQ').fill('');
+  await owner.locator('#srcSup').selectOption({ label: 'Offroad Zone' });
+  await expect(owner.locator('.src-card')).toHaveCount(3);
+  await owner.locator('#pickAll').check();
+  await expect(owner.locator('#bulkBar')).toBeVisible();
+  await owner.locator('#bulkMk').fill('30');
+  await owner.locator('#bulkAdd').click();
+  await expect(owner.locator('.overlay')).toContainText('Add 3 products');
+  await owner.locator('#bk_ok').click();
+  const added = await owner.evaluate(() => DB.data.products.filter(p => (p.sources || []).some(s => s.supplierId === 'sup_offroadzone')).map(p => ({ sku: p.sources[0].sku, price: p.price, cost: p.cost })));
+  expect(added.length).toBe(3);
+  // Winch 2,500 AED +5% VAT ×0.1047 ×1.10 = 302.333 → +30% = 393.03 → 394
+  expect(added.find(a => a.sku === 'W-9').price).toBe(394);
 });
 
 test('owner: creates employees with detailed permissions', async () => {
@@ -227,6 +243,24 @@ test('store keeper: a price change waits for the owner; approval applies it ever
   await expect(owner.locator('#apBody')).toContainText('Nothing waiting');
   await expect.poll(async () => { await refresh(keeper); return keeper.evaluate((id) => DB.product(id).price, pid); }, { timeout: 20000 }).toBeCloseTo(orig + 7, 3);
   expect(errors).toEqual([]);
+});
+
+test('owner: is told when a supplier changes the price of a product he sells, and fixes it in one click', async () => {
+  await fetch(API + '/__test/price?v=1200'); // the supplier raises the price
+  await owner.evaluate(() => Auth.api('POST', '/api/suppliers/sup_amwrangler/sync'));
+  await go(owner, 'dashboard');
+  await owner.evaluate(() => location.reload()); await unlocked(owner);
+  await expect(owner.locator('.cc-todo')).toContainText('changed price at the supplier', { timeout: 15000 });
+  await expect(owner.locator('.cc-todo')).toContainText('out of stock at the supplier'); // the Winch added earlier
+  await expect(owner.locator('#side a[href="#/sourcing"] .badge')).toHaveText('2');
+  await owner.locator('.cc-todo a[href="#/sourcing/mine"]').first().click();
+  const row = owner.locator('#srcBody tr', { hasText: 'RS-100' });
+  await expect(row).toContainText('AED 1,200.00');
+  // keep 40% margin: 1,200 × 0.1047 × 1.10 = 138.204 → ×1.4 = 193.49 → 194
+  await row.locator('[data-fix="margin"]').click();
+  await expect.poll(() => owner.evaluate((id) => DB.product(id).price, productId)).toBe(194);
+  expect(await owner.evaluate((id) => DB.product(id).cost, productId)).toBeCloseTo(138.204, 3);
+  await expect(owner.locator('#side a[href="#/sourcing"] .badge')).toHaveText('1');
 });
 
 test('owner: performance and activity per employee; sign out works', async () => {

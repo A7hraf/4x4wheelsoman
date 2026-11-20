@@ -167,6 +167,8 @@
     };
     H.extraTodo = (add) => {
       if (can('suppliers') || can('purchases')) { const b = buyLines(); add(b.length, 'brand', 'factory', L('order lines to buy from suppliers', 'بنود طلبات يجب شراؤها من الموردين'), '#/suppliers', L('Buy', 'شراء')); }
+      add(alerts.moved, 'warn', 'tag', L('of your products changed price at the supplier', 'من منتجاتك تغيّر سعرها لدى المورد'), '#/sourcing/mine', L('Review', 'مراجعة'));
+      add(alerts.out, 'bad', 'alert', L('of your products are out of stock at the supplier', 'من منتجاتك غير متوفرة لدى المورد'), '#/sourcing/mine', L('Review', 'مراجعة'));
       if (online() && isOwner()) add(Auth.inbox().pending, 'violet', 'inbox', L('employee requests waiting for your approval', 'طلبات موظفين بانتظار موافقتك'), '#/approvals', L('Review', 'مراجعة'));
     };
 
@@ -190,7 +192,7 @@
           ${seesCosts() ? kpi('wallet', 'tone-info', L('Bought this month', 'المشتريات هذا الشهر'), H.big(spentMonth), '') : ''}
           ${kpi('factory', 'tone-violet', t('suppliers'), `<span class="num">${list.filter(s => s.active !== false).length}</span>`, `<span>${list.filter(s => ['shopify', 'magento'].includes(s.platform)).length} ${L('synced automatically', 'متزامن تلقائياً')}</span>`)}
         </div>
-        ${known.length && edit ? `<div class="notice mt">${icon('sparkle')}<div><b>${L('Add the suppliers you buy from', 'أضف الموردين الذين تشتري منهم')}</b><br>${known.map(k => esc(k.name)).join(' · ')}<div class="actions" style="margin-top:8px"><button class="btn sm primary" id="supKnown">${icon('plus')}${L('Add them', 'إضافتهم')}</button></div></div></div>` : ''}
+        ${known.length && edit && !online() ? `<div class="notice mt">${icon('sparkle')}<div><b>${L('Add the suppliers you buy from', 'أضف الموردين الذين تشتري منهم')}</b><br>${known.map(k => esc(k.name)).join(' · ')}<div class="actions" style="margin-top:8px"><button class="btn sm primary" id="supKnown">${icon('plus')}${L('Add them', 'إضافتهم')}</button></div></div></div>` : ''}
         ${noSup.length ? `<div class="card mt"><div class="card-h"><h3>${icon('alert')} ${L('Order lines with no supplier', 'بنود بدون مورد')}</h3></div><div class="card-b" style="padding:8px 0 0"><div class="table-wrap"><table class="t"><thead><tr><th>${t('order')}</th><th>${t('product')}</th><th class="r">${L('To buy', 'للشراء')}</th><th>${t('supplier')}</th></tr></thead><tbody>
           ${noSup.map((l, i) => `<tr><td><a href="#" data-oid="${l.s.id}" class="strong">${esc(l.s.no)}</a><div class="faint">${esc(l.s.customerName)}</div></td><td>${esc(l.it.name)}</td><td class="r num">${l.it.toBuy}</td><td>${edit ? `<select class="input sm" data-assign="${i}"><option value="">${L('Choose…', 'اختر…')}</option>${list.filter(s => s.active !== false).map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join('')}</select>` : '—'}</td></tr>`).join('')}</tbody></table></div></div></div>` : ''}
         <div class="sup-grid mt">${list.map(s0 => {
@@ -396,14 +398,15 @@
     // SOURCING: supplier catalogues → my products
     // =====================================================
     VIEWS.sourcing = function (v) {
+      if (['search', 'mine', 'changes'].includes(state.sub)) state.srcTab = state.sub;
       const tab = state.srcTab || (online() ? 'search' : 'mine');
       const auto = D().suppliers.filter(s => ['shopify', 'magento'].includes(s.platform) && s.active !== false);
       const mine = D().products.filter(p => (p.sources || []).length);
       v.innerHTML = `
         <div class="page-head"><div><h2>${t('sourcing')}</h2><p>${L('Pick products from your suppliers, set your margin and selling price, and watch their prices.', 'اختر منتجات من الموردين، وحدد هامش ربحك وسعر البيع، وراقب أسعارهم.')}</p></div><div class="actions">${can('inventory', 'request') ? `<button class="btn" id="srcManual">${icon('link')}${L('Add from a link', 'إضافة من رابط')}</button>` : ''}</div></div>
-        <div class="tabs" role="tablist">${[['search', L('Search catalogs', 'البحث في الكتالوجات')], ['mine', L('My sourced products', 'منتجاتي من الموردين'), mine.length], ['changes', L('Price changes', 'تغيّر الأسعار')]].map(([k, l, n]) => `<button role="tab" data-tab="${k}" class="${tab === k ? 'on' : ''}">${l}${n ? ` <span class="count">${n}</span>` : ''}</button>`).join('')}</div>
+        <div class="tabs" role="tablist">${[['search', L('Search catalogs', 'البحث في الكتالوجات')], ['mine', L('My sourced products', 'منتجاتي من الموردين'), alerts.n ? alerts.n + ' !' : mine.length], ['changes', L('Price changes', 'تغيّر الأسعار')]].map(([k, l, n]) => `<button role="tab" data-tab="${k}" class="${tab === k ? 'on' : ''}">${l}${n ? ` <span class="count">${n}</span>` : ''}</button>`).join('')}</div>
         <div id="srcBody" class="mt"></div>`;
-      $$('[data-tab]', v).forEach(b => b.onclick = () => { state.srcTab = b.dataset.tab; H.render(); });
+      $$('[data-tab]', v).forEach(b => b.onclick = () => { state.srcTab = b.dataset.tab; if (state.sub) location.hash = '#/sourcing/' + b.dataset.tab; else H.render(); });
       if ($('#srcManual')) $('#srcManual').onclick = () => sourceModal(null, null);
       const body = $('#srcBody');
       if (!online() && tab !== 'mine') { body.innerHTML = `<div class="notice">${icon('alert')}<div>${L('Searching the suppliers\' full catalogs needs the online server (it copies their product lists every night). You can still add products from a link.', 'البحث في كتالوجات الموردين الكاملة يحتاج الخادم (ينسخ قوائم منتجاتهم كل ليلة). يمكنك إضافة منتجات من رابط.')}</div></div>`; return; }
@@ -415,15 +418,22 @@
         body.innerHTML = `<form class="src-bar" id="srcForm"><input class="input" id="srcQ" placeholder="${L('Search: part name, number, brand, vehicle… e.g. "JL bumper", "Bilstein 5100"', 'ابحث: اسم القطعة، الرقم، الماركة، السيارة… مثل "JL bumper"')}" value="${esc(q)}">
             <select class="input" id="srcSup"><option value="">${L('All suppliers', 'كل الموردين')}</option>${auto.map(s => `<option value="${s.id}" ${s.id === sid ? 'selected' : ''}>${esc(s.name)}</option>`).join('')}</select>
             <label class="check"><input type="checkbox" id="srcAv" ${av ? 'checked' : ''}> ${L('In stock', 'متوفر')}</label><button class="btn primary" type="submit">${icon('search')}</button></form>
-          <div id="srcRes">${res.err ? errBox(res.err) : !res.data ? spinner : resultsHtml(res.data)}</div>`;
+          ${syncStrip(auto)}
+          <div id="srcRes">${res.err ? errBox(res.err) : !res.data ? spinner : resultsHtml(res.data)}</div>
+          ${can('inventory', 'request') && seesCosts() ? `<div class="sticky-act hide" id="bulkBar"><span id="bulkN" class="strong"></span>
+            <label class="bulk-f">${L('Margin', 'الهامش')} <input class="input sm num" id="bulkMk" type="number" min="0" step="1" value="${esc(state.bulkMk != null ? state.bulkMk : 35)}" style="width:70px">%</label>
+            <label class="bulk-f">${t('category')} <select class="input sm" id="bulkCat">${D().categories.map(c => `<option value="${c.id}" ${c.id === state.bulkCat ? 'selected' : ''}>${esc(c[I18N.lang] || c.en)}</option>`).join('')}</select></label>
+            <button class="btn primary" id="bulkAdd">${icon('check')}${L('Add to my products', 'أضف إلى منتجاتي')}</button></div>` : ''}`;
+        bindStrip(body);
         $('#srcForm').onsubmit = (e) => { e.preventDefault(); state.srcQ = $('#srcQ').value.trim(); state.srcSup = $('#srcSup').value; state.srcAvail = $('#srcAv').checked; state.srcPage = 1; H.render(); };
         $('#srcSup').onchange = $('#srcAv').onchange = () => $('#srcForm').requestSubmit();
-        if (res.data) bindResults(body, res.data.items);
-        $$('[data-pg]', body).forEach(b => b.onclick = () => { state.srcPage = +b.dataset.pg; H.render(); scrollTo(0, 0); });
+        if (res.data) { bindResults(body, res.data.items); bindBulk(body, res.data.items); }
+        $$('[data-pg]', body).forEach(b => b.onclick = () => { state.srcPage = Math.max(1, +b.dataset.pg); H.render(); scrollTo(0, 0); });
       }
       if (tab === 'mine') {
         const look = online() && mine.length && can('suppliers') ? load('mine-lookup', () => Auth.api('POST', '/api/catalog/lookup', { refs: mine.flatMap(p => p.sources.filter(x => x.sku).map(x => ({ supplierId: x.supplierId, sku: x.sku }))) }), 120000) : null;
         const latest = {}; ((look && look.data && look.data.items) || []).forEach(i => { latest[i.supplierId + '|' + i.sku] = i; });
+        if (look && look.data) computeAlerts(look.data.items);
         const rows = mine.map(p => {
           const src = DB.preferredSource(p) || p.sources[0]; const s = sup(DB.supplier(src.supplierId));
           const lt = latest[src.supplierId + '|' + src.sku];
@@ -431,16 +441,22 @@
           const newCost = nowPrice ? landed(s, nowPrice) : null;
           const marg = p.price && p.cost ? (p.price - p.cost) / p.price * 100 : null;
           const newMarg = p.price && newCost ? (p.price - newCost) / p.price * 100 : null;
-          return { p, src, s, lt, nowPrice, newCost, marg, newMarg, moved: lt && src.price && lt.price != null && Math.abs(lt.price - src.price) > 0.001 };
+          const mk = p.marginPct != null ? +p.marginPct : (p.cost ? Math.round((p.price / p.cost - 1) * 1000) / 10 : s.defaultMarkup);
+          const keepPrice = newCost ? sellPrice(newCost, mk, s.roundTo) : p.price;
+          return { p, src, s, lt, nowPrice, newCost, marg, newMarg, keepPrice, mk, moved: lt && src.price && lt.price != null && Math.abs(lt.price - src.price) > 0.001 };
         }).sort((a, b) => (b.moved - a.moved) || a.p.name.localeCompare(b.p.name));
         const flagged = rows.filter(r => r.moved || (r.lt && r.lt.available === false));
-        body.innerHTML = `${flagged.length ? `<div class="notice">${icon('alert')}<div>${L(`${flagged.length} product(s) changed at the supplier (price or stock). Review the highlighted rows.`, `${flagged.length} منتج تغيّر لدى المورد (السعر أو التوفر). راجع الصفوف المميزة.`)}</div></div>` : ''}
+        const movedRows = rows.filter(r => r.moved);
+        body.innerHTML = `${flagged.length ? `<div class="notice">${icon('alert')}<div>${L(`${flagged.length} product(s) changed at the supplier (price or stock). Review the highlighted rows.`, `${flagged.length} منتج تغيّر لدى المورد (السعر أو التوفر). راجع الصفوف المميزة.`)}${movedRows.length && can('pricing', 'request') ? `<div class="actions" style="margin-top:8px"><button class="btn sm" data-all="price">${L('All: keep my prices, update costs', 'الكل: أبقِ أسعاري وحدّث التكلفة')}</button><button class="btn sm primary" data-all="margin">${L('All: keep my margins (new prices)', 'الكل: أبقِ هوامشي (أسعار جديدة)')}</button></div>` : ''}</div></div>` : `<p class="faint">${L('Supplier prices are checked every night. Products whose supplier price or stock changed are highlighted here and on your home screen.', 'تُفحص أسعار الموردين كل ليلة. المنتجات التي تغيّر سعرها أو توفرها لدى المورد تظهر مميزة هنا وفي الشاشة الرئيسية.')}</p>`}
           <div class="card mt"><div class="card-b" style="padding:8px 0 0"><div class="table-wrap">${rows.length ? `<table class="t"><thead><tr><th>${t('product')}</th><th>${t('supplier')}</th>${seesCosts() ? `<th class="r">${L('Supplier price', 'سعر المورد')}</th><th class="r">${L('Cost', 'التكلفة')}</th>` : ''}<th class="r">${L('My price', 'سعري')}</th>${seesCosts() ? `<th class="r">${L('Margin', 'الهامش')}</th>` : ''}<th></th></tr></thead><tbody>
             ${rows.map(r => `<tr class="${r.moved || (r.lt && r.lt.available === false) ? 'hl' : ''}"><td><b>${esc(r.p.name)}</b><div class="faint">${esc(r.src.sku || '')}${(r.p.sources || []).length > 1 ? ` · +${r.p.sources.length - 1} ${L('more suppliers', 'موردين آخرين')}` : ''}</div></td><td><a href="#/suppliers/${esc(r.s.id)}">${esc(r.s.name)}</a>${r.lt && r.lt.available === false ? `<div class="bad-t" style="font-size:12px">${L('out of stock there', 'غير متوفر لديه')}</div>` : ''}</td>
               ${seesCosts() ? `<td class="r">${r.src.price ? curTxt(r.src.price, r.s.currency) : '—'}${r.moved ? `<div class="${r.lt.price > r.src.price ? 'bad-t' : 'ok-t'}" style="font-size:12px">→ ${curTxt(r.lt.price, r.s.currency)}</div>` : ''}</td><td class="r">${money(r.p.cost)}${r.moved ? `<div class="faint" style="font-size:12px">→ ${moneyTxt(r.newCost)}</div>` : ''}</td>` : ''}
               <td class="r strong">${money(r.p.price)}</td>${seesCosts() ? `<td class="r">${r.marg != null ? H.pct(r.marg) : '—'}${r.moved && r.newMarg != null ? `<div class="${r.newMarg < r.marg ? 'bad-t' : 'ok-t'}" style="font-size:12px">→ ${H.pct(r.newMarg)}</div>` : ''}</td>` : ''}
-              <td class="r"><button class="btn sm ${r.moved ? 'primary' : ''}" data-edit="${r.p.id}">${r.moved ? L('Review', 'مراجعة') : icon('edit')}</button></td></tr>`).join('')}
+              <td class="r"><div class="actions" style="justify-content:flex-end;flex-wrap:nowrap">${r.moved && can('pricing', 'request') ? `<button class="btn sm" data-fix="price" data-pid="${r.p.id}" title="${L('Keep my price, update cost', 'أبقِ سعري وحدّث التكلفة')}">${L('Keep price', 'أبقِ السعر')}</button><button class="btn sm primary" data-fix="margin" data-pid="${r.p.id}" title="${L('Keep my margin: new price', 'أبقِ الهامش: سعر جديد')}">${L('Keep margin', 'أبقِ الهامش')} → ${moneyTxt(r.keepPrice)}</button>` : ''}<button class="btn sm" data-edit="${r.p.id}">${icon('edit')}</button></div></td></tr>`).join('')}
           </tbody></table>` : `<div class="empty">${L('No products linked to a supplier yet. Search the catalogs or add one from a link.', 'لا توجد منتجات مرتبطة بمورد بعد. ابحث في الكتالوجات أو أضف من رابط.')}</div>`}</div></div></div>`;
+        const fix = (r, how) => { const live = DB.product(r.p.id); const src = (live.sources || []).find(x => x.supplierId === r.src.supplierId && x.sku === r.src.sku); if (!src) return; src.price = r.lt.price; src.available = r.lt.available; src.checkedAt = Date.now(); live.cost = r.newCost; if (how === 'margin') { live.price = r.keepPrice; live.marginPct = r.mk; } };
+        $$('[data-fix]', body).forEach(b => b.onclick = () => { fix(rows.find(x => x.p.id === b.dataset.pid), b.dataset.fix); DB.save(); drop('mine-lookup'); toast(t('saved')); checkAlerts(); H.render(); });
+        $$('[data-all]', body).forEach(b => b.onclick = () => confirmBox(b.dataset.all === 'margin' ? L(`Update ${movedRows.length} products: new cost and new selling price that keeps each product's margin?`, `تحديث ${movedRows.length} منتج: تكلفة جديدة وسعر بيع جديد يحافظ على هامش كل منتج؟`) : L(`Update the cost of ${movedRows.length} products and keep their selling prices?`, `تحديث تكلفة ${movedRows.length} منتج مع إبقاء أسعار البيع؟`), () => { movedRows.forEach(r => fix(r, b.dataset.all)); DB.save(); drop('mine-lookup'); toast(t('saved')); checkAlerts(); H.render(); }, L('Update', 'تحديث')));
         $$('[data-edit]', body).forEach(b => b.onclick = () => { const r = rows.find(x => x.p.id === b.dataset.edit); sourceModal({ supplierId: r.src.supplierId, sku: r.src.sku, url: r.src.url, title: r.src.title || r.p.name, price: r.nowPrice, currency: r.s.currency, available: r.lt ? r.lt.available : r.src.available }, r.p); });
       }
       if (tab === 'changes') {
@@ -455,17 +471,100 @@
     function resultsHtml(d) {
       if (!d.items.length) return `<div class="empty">${t('no_results')}</div>`;
       const pages = Math.ceil(d.total / d.size);
-      return `<p class="faint" style="font-size:12.5px">${d.total} ${L('products', 'منتج')}</p><div class="src-grid">${d.items.map((i, k) => {
+      const pickable = d.items.some(i => i.price != null) && can('inventory', 'request') && seesCosts();
+      return `<div class="src-count"><span class="faint">${d.total} ${L('products', 'منتج')}</span>${pickable ? `<label class="check"><input type="checkbox" id="pickAll"> ${L('Select all on this page', 'تحديد الكل في هذه الصفحة')}</label>` : ''}</div><div class="src-grid">${d.items.map((i, k) => {
         const s = sup(DB.supplier(i.supplierId)); const has = D().products.find(p => sourceOf(p, i.supplierId) && sourceOf(p, i.supplierId).sku === i.sku);
         const cheaper = (i.also || []).filter(a => a.price != null && i.price != null && landed(DB.supplier(a.supplierId), a.price) < landed(s, i.price) - 0.001);
+        const pick = !has && i.price != null && can('inventory', 'request') && seesCosts();
         return `<div class="card src-card">
+          ${pick ? `<label class="src-pick" title="${L('Select', 'تحديد')}"><input type="checkbox" data-pick="${k}" aria-label="${esc(L('Select', 'تحديد') + ' ' + i.title)}"></label>` : ''}
           <div class="src-img">${i.image ? `<img src="${esc(i.image)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : icon('image')}</div>
           <div class="src-b"><div class="src-sup">${esc(s.name)} · ${esc(i.sku)}</div><a class="src-t" href="${esc(i.url)}" target="_blank" rel="noopener">${esc(i.title)}</a>
             <div class="src-p">${i.price != null ? `<b>${curTxt(i.price, i.currency)}</b>${i.compareAt ? ` <s class="faint">${fmt(i.compareAt, 2)}</s>` : ''}<span class="faint"> → ${L('cost', 'تكلفة')} ${moneyTxt(landed(s, i.price))}</span>` : `<span class="faint">${L('Price hidden (no cost permission)', 'السعر مخفي (بدون صلاحية التكلفة)')}</span>`}</div>
             <div class="src-tags">${i.available ? `<span class="pill s-delivered">${L('In stock', 'متوفر')}</span>` : `<span class="pill s-cancelled">${L('Out of stock', 'غير متوفر')}</span>`}${i.vendor ? `<span class="pill plain">${esc(i.vendor)}</span>` : ''}${(i.also || []).length ? `<span class="pill plain ${cheaper.length ? 's-new' : ''}" title="${esc(i.also.map(a => supName(a.supplierId) + (a.price != null ? ' ' + curTxt(a.price, a.currency) : '')).join(' · '))}">${cheaper.length ? L('Cheaper at ', 'أرخص لدى ') + esc(supName(cheaper[0].supplierId)) : L('Also at ', 'متوفر أيضاً لدى ') + esc(supName(i.also[0].supplierId))}</span>` : ''}</div>
             ${can('inventory', 'request') ? `<button class="btn sm ${has ? '' : 'primary'} block" data-add="${k}">${has ? icon('check') + L('In my products · edit', 'ضمن منتجاتي · تعديل') : icon('plus') + L('Add to my products', 'أضف إلى منتجاتي')}</button>` : ''}</div></div>`;
-      }).join('')}</div>${pages > 1 ? `<div class="pager">${Array.from({ length: Math.min(pages, 12) }, (_, n) => n + 1).map(n => `<button class="btn sm ${n === d.page ? 'primary' : ''}" data-pg="${n}">${n}</button>`).join('')}${pages > 12 ? `<span class="faint">… ${pages}</span>` : ''}</div>` : ''}`;
+      }).join('')}</div>${pages > 1 ? `<div class="pager"><button class="btn sm" data-pg="${d.page - 1}" ${d.page <= 1 ? 'disabled' : ''}>← ${L('Previous', 'السابق')}</button><span class="faint">${L('Page', 'صفحة')} ${d.page} / ${pages}</span><button class="btn sm" data-pg="${d.page + 1}" ${d.page >= pages ? 'disabled' : ''}>${L('Next', 'التالي')} →</button></div>` : ''}`;
     }
+    // ---------- catalog copy status (and auto-refresh while copying) ----------
+    let stripTimer = null;
+    function syncStrip(auto) {
+      const stats = load('supstats', () => Auth.api('GET', '/api/suppliers/stats'), 5000);
+      const st = (stats.data && stats.data.stats) || {};
+      const busy = auto.some(s => (st[s.id] || {}).running || !(st[s.id] || {}).items);
+      if (busy && !stripTimer) stripTimer = setTimeout(() => { stripTimer = null; drop('supstats'); drop('cat:'); if (routeIs('sourcing') && !document.querySelector('.overlay')) H.render(); }, 6000);
+      return `<div class="sync-strip">${auto.map(s => {
+        const x = st[s.id] || {};
+        const state1 = x.running ? `<span class="typing"><i></i><i></i><i></i></span> ${L('Copying catalog… (1–2 minutes)', 'جارٍ نسخ الكتالوج… (دقيقة أو دقيقتان)')}` : x.lastRun && x.lastRun.ok === false && !x.items ? `<span class="bad-t">${L('Failed', 'فشل')}: ${esc(x.lastRun.error || '')}</span>` : x.items ? `${fmt(x.items, 0)} ${L('products', 'منتج')} · ${L('updated', 'تحديث')} ${ago((x.lastRun && (x.lastRun.done || x.lastRun.at)) || x.lastSeen)}` : L('Waiting to copy…', 'بانتظار النسخ…');
+        return `<div class="ss-item"><b>${esc(s.name)}</b><span>${state1}</span>${can('suppliers', 'edit') && !x.running ? `<button class="btn sm ghost" data-sync="${esc(s.id)}" title="${L('Sync now', 'زامن الآن')}">${icon('refresh')}</button>` : ''}</div>`;
+      }).join('')}</div>`;
+    }
+    function bindStrip(root) {
+      $$('[data-sync]', root).forEach(b => b.onclick = async () => {
+        b.disabled = true; b.innerHTML = '<span class="typing"><i></i><i></i><i></i></span>';
+        try { const r = await Auth.api('POST', `/api/suppliers/${encodeURIComponent(b.dataset.sync)}/sync`); toast(L(`${r.total} products · ${r.added} new · ${r.changed} price changes`, `${r.total} منتج · ${r.added} جديد · ${r.changed} تغيير سعر`)); }
+        catch (e) { alert(e.message); }
+        drop('supstats'); drop('cat'); checkAlerts(); H.render();
+      });
+    }
+    // ---------- pick several products and add them at once ----------
+    function newSourced(i, s, cost, price, markup, category) {
+      return { id: DB.uid('p'), name: i.title, nameAr: '', partNumber: i.sku, sku: i.sku || 'SKU-' + Date.now().toString(36).toUpperCase(), slug: String(i.title).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60) + '-' + Math.random().toString(36).slice(2, 6), brand: i.vendor && !/^am-wrangler$/i.test(i.vendor) ? i.vendor : '', category, cost, price, stock: 0, reorder: 0, location: '', fitment: '', vehicles: [], active: true, online: true, showPrice: true, image: '', oldPrice: 0, description: '', descriptionAr: '', featured: false,
+        sources: [{ supplierId: s.id, sku: i.sku, url: i.url, title: i.title, price: i.price, currency: s.currency, available: i.available !== false, checkedAt: Date.now(), preferred: true }], marginPct: markup, priceMode: 'margin', created: Date.now() };
+    }
+    function bindBulk(root, items) {
+      const bar = $('#bulkBar', root); if (!bar) return;
+      const picked = () => $$('[data-pick]:checked', root).map(c => items[+c.dataset.pick]);
+      const upd = () => {
+        const p = picked(); bar.classList.toggle('hide', !p.length);
+        const mk = parseFloat($('#bulkMk', root).value) || 0; state.bulkMk = mk; state.bulkCat = $('#bulkCat', root).value;
+        const tot = p.reduce((a, i) => { const s = sup(DB.supplier(i.supplierId)); return a + sellPrice(landed(s, i.price), mk, s.roundTo); }, 0);
+        $('#bulkN', root).textContent = p.length ? L(`${p.length} selected · selling prices from ${moneyTxt(Math.min(...p.map(i => { const s = sup(DB.supplier(i.supplierId)); return sellPrice(landed(s, i.price), mk, s.roundTo); })))}`, `${p.length} محدد · أسعار البيع من ${moneyTxt(Math.min(...p.map(i => { const s = sup(DB.supplier(i.supplierId)); return sellPrice(landed(s, i.price), mk, s.roundTo); })))}`) : '';
+        void tot;
+      };
+      root.addEventListener('change', (e) => { if (e.target.matches('[data-pick], #bulkMk, #bulkCat')) upd(); });
+      $('#bulkMk', root).addEventListener('input', upd);
+      if ($('#pickAll', root)) $('#pickAll', root).onchange = (e) => { $$('[data-pick]', root).forEach(c => { c.checked = e.target.checked; }); upd(); };
+      $('#bulkAdd', root).onclick = () => {
+        const p = picked(); if (!p.length) return;
+        const mk = parseFloat($('#bulkMk', root).value) || 0, cat = $('#bulkCat', root).value;
+        const rows = p.map(i => { const s = sup(DB.supplier(i.supplierId)); const cost = landed(s, i.price); return { i, s, cost, price: sellPrice(cost, mk, s.roundTo) }; });
+        modal({
+          title: L(`Add ${rows.length} products to my shop`, `إضافة ${rows.length} منتج إلى متجري`), wide: true,
+          body: `<p class="muted">${L('Check the selling prices. You can change any of them here or later in Inventory.', 'راجع أسعار البيع. يمكنك تعديل أي سعر هنا أو لاحقاً من المخزون.')}</p>
+            <div class="table-wrap"><table class="t"><thead><tr><th>${t('product')}</th><th>${t('supplier')}</th><th class="r">${L('Supplier price', 'سعر المورد')}</th><th class="r">${L('Cost', 'التكلفة')}</th><th class="r">${L('My price (OMR)', 'سعري (ر.ع)')}</th></tr></thead><tbody>
+            ${rows.map((r, k) => `<tr><td><b>${esc(r.i.title)}</b><div class="faint">${esc(r.i.sku)}</div></td><td>${esc(r.s.name)}</td><td class="r">${curTxt(r.i.price, r.i.currency)}</td><td class="r">${money(r.cost)}</td><td class="r"><input class="input sm num bp" data-k="${k}" type="number" step="0.001" min="0" value="${r.price}" style="width:100px"></td></tr>`).join('')}
+            </tbody></table></div>`,
+          footer: `<button class="btn" data-close>${t('cancel')}</button><button class="btn primary" id="bk_ok">${icon('check')}${L('Add', 'إضافة')} ${rows.length}</button>`,
+          onMount: (el, m) => {
+            $('#bk_ok', el).onclick = () => {
+              rows.forEach((r, k) => { const pr = r3(parseFloat($(`.bp[data-k="${k}"]`, el).value) || r.price); D().products.push(newSourced(r.i, r.s, r.cost, pr, r.cost ? Math.round((pr / r.cost - 1) * 1000) / 10 : mk, cat)); });
+              DB.save(); m.close(); drop('mine-lookup');
+              toast(online() && !Auth.isOwner() && !Auth.can('inventory', 'edit') ? L('Sent to the owner for approval', 'أُرسل إلى المالك للموافقة') : L(`${rows.length} products added. Publish the website (Settings → Publish) to show them online.`, `تمت إضافة ${rows.length} منتج. انشر الموقع (الإعدادات ← النشر) لعرضها.`));
+              H.render();
+            };
+          }
+        });
+      };
+    }
+    // ---------- supplier price / stock alerts for products I sell ----------
+    const alerts = { n: 0, moved: 0, out: 0 };
+    function computeAlerts(items) {
+      const latest = {}; (items || []).forEach(i => { latest[i.supplierId + '|' + i.sku] = i; });
+      let moved = 0, out = 0;
+      D().products.forEach(p => { const src = DB.preferredSource(p); if (!src || !src.sku) return; const lt = latest[src.supplierId + '|' + src.sku]; if (!lt) return; if (lt.price != null && src.price && Math.abs(lt.price - src.price) > 0.001) moved++; else if (lt.available === false) out++; });
+      const changed = moved !== alerts.moved || out !== alerts.out;
+      Object.assign(alerts, { moved, out, n: moved + out });
+      if (!changed) return;
+      if (routeIs('dashboard') && !document.querySelector('.overlay')) H.render(); // show it in the to-do list
+      else if (H.renderShell) try { H.renderShell(); } catch (e) { }
+    }
+    const mineRefs = () => D().products.filter(p => (p.sources || []).length).flatMap(p => p.sources.filter(x => x.sku).map(x => ({ supplierId: x.supplierId, sku: x.sku })));
+    async function checkAlerts() {
+      if (!online() || !seesCosts() || !can('suppliers')) return;
+      const refs = mineRefs(); if (!refs.length) return computeAlerts([]);
+      try { const r = await Auth.api('POST', '/api/catalog/lookup', { refs }); computeAlerts(r.items); } catch (e) { }
+    }
+    setTimeout(checkAlerts, 2500); setInterval(checkAlerts, 20 * 60000);
     function bindResults(root, items) {
       $$('[data-add]', root).forEach(b => b.onclick = () => {
         const i = items[+b.dataset.add];
@@ -738,7 +837,7 @@
     const at = (id) => ROUTES.findIndex(r => r.id === id);
     ROUTES.splice(at('purchases') + 1, 0,
       { id: 'suppliers', icon: 'factory', grp: 'grp_stock', badge: () => (can('suppliers') || can('purchases') ? buyLines().length : 0), tone: 'warn' },
-      { id: 'sourcing', icon: 'link', grp: 'grp_stock' });
+      { id: 'sourcing', icon: 'link', grp: 'grp_stock', badge: () => alerts.n, tone: 'warn' });
     if (online()) ROUTES.splice(at('settings'), 0,
       { id: 'team', icon: 'users', grp: 'grp_set' },
       { id: 'approvals', icon: 'inbox', grp: 'grp_set', badge: () => Auth.inbox().pending, tone: 'warn' });

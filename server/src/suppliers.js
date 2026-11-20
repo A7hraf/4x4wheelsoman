@@ -7,7 +7,7 @@
 import { logActivity } from './store.js';
 
 export const UA = '4x4WheelsOman-Supplier-Sync/1.0 (+https://a7hraf.github.io/4x4wheelsoman/)';
-const PAUSE_MS = Number(process.env.SYNC_PAUSE_MS || 1200);
+const pauseMs = () => Number(process.env.SYNC_PAUSE_MS || 1200);
 const MAX_PAGES = 80;
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 export const skey = (s) => String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
@@ -25,7 +25,15 @@ export function safeUrl(u) {
   return true;
 }
 
+// A busy shop sometimes refuses a request (403/429/5xx) and accepts it a few seconds later: try up to 3 times.
+const retryMs = () => (process.env.SYNC_RETRY_MS || '4000,12000').split(',').map(Number);
 async function getJSON(fetchImpl, url, opts) {
+  for (let i = 0; ; i++) {
+    try { return await getJSONOnce(fetchImpl, url, opts); }
+    catch (e) { const w = retryMs(); if (!e.retry || i >= w.length) throw e; await sleep(w[i]); }
+  }
+}
+async function getJSONOnce(fetchImpl, url, opts) {
   const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 30000);
   try {
     // follow at most 3 redirects, and only to public https addresses
@@ -38,7 +46,7 @@ async function getJSON(fetchImpl, url, opts) {
       if (hop >= 3) throw new Error('Too many redirects');
       target = new URL(loc, target).href;
     }
-    if (!r.ok) throw new Error(`${new URL(url).host} answered ${r.status}`);
+    if (!r.ok) throw Object.assign(new Error(`${new URL(url).host} answered ${r.status}`), { retry: [403, 408, 425, 429, 500, 502, 503, 504].includes(r.status) });
     const text = await r.text();
     if (text.length > 25e6) throw new Error('Response too large');
     try { return JSON.parse(text); } catch { throw new Error(`${new URL(url).host} did not return data (it may block automatic access)`); }
@@ -69,7 +77,7 @@ export async function fetchShopify(site, fetchImpl, onPage) {
     }
     if (onPage) onPage(page, items.length);
     if (prods.length < 250) break;
-    await sleep(PAUSE_MS);
+    await sleep(pauseMs());
   }
   return items;
 }
@@ -103,7 +111,7 @@ export async function fetchMagento(site, fetchImpl, onPage) {
       });
     }
     if (onPage) onPage(page, items.length, pages);
-    if (page < pages) await sleep(PAUSE_MS);
+    if (page < pages) await sleep(pauseMs());
   }
   return items;
 }

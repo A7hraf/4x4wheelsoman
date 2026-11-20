@@ -9,7 +9,7 @@ import EmbeddedPostgres from 'embedded-postgres';
 import { createPool, migrate } from '../src/store.js';
 import { createApp } from '../src/index.js';
 
-process.env.SYNC_PAUSE_MS = '0';
+process.env.SYNC_PAUSE_MS = '0'; process.env.SYNC_RETRY_MS = '10,10';
 let pg, pool, server, base;
 import { fakeFetch, fakeUpstream } from './fakes.js';
 

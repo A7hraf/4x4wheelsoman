@@ -8,14 +8,20 @@ import { createPool, migrate } from '../src/store.js';
 import { createApp } from '../src/index.js';
 import { fakeFetch } from './fakes.js';
 
-process.env.SYNC_PAUSE_MS = '0';
+process.env.SYNC_PAUSE_MS = '0'; process.env.SYNC_RETRY_MS = '10,10';
 const port = Number(process.argv[2] || 8790), origin = process.argv[3] || 'http://localhost:8765';
 const pgPort = 56000 + Math.floor(Math.random() * 3000);
 const pg = new EmbeddedPostgres({ databaseDir: path.join(os.tmpdir(), 'x4wpg-e2e-' + process.pid), user: 'postgres', password: 'pw', port: pgPort, persistent: false, onLog: () => {} });
 await pg.initialise(); await pg.start();
 const pool = createPool(`postgres://postgres:pw@localhost:${pgPort}/postgres`);
 await migrate(pool);
-const server = http.createServer(createApp({ pool, env: { SETUP_CODE: 'SETUP-TEST-1', APP_SECRET: 'test-secret-'.repeat(3), ALLOWED_ORIGINS: origin }, fetchImpl: fakeFetch }));
+const app = createApp({ pool, env: { SETUP_CODE: 'SETUP-TEST-1', APP_SECRET: 'test-secret-'.repeat(3), ALLOWED_ORIGINS: origin }, fetchImpl: fakeFetch });
+// test-only: change the fake AM Wrangler price of RS-100
+const server = http.createServer((req, res) => {
+  const m = /^\/__test\/price\?v=([\d.]+)$/.exec(req.url);
+  if (m) { globalThis.__rsPrice = m[1]; res.end('ok'); return; }
+  app(req, res);
+});
 server.listen(port, () => console.log('READY'));
 const stop = async () => { server.close(); await pool.end().catch(() => {}); await pg.stop().catch(() => {}); process.exit(0); };
 process.on('SIGTERM', stop); process.on('SIGINT', stop);

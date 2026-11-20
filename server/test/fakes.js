@@ -16,6 +16,8 @@ export async function fakeFetch(url, opts = {}) {
   }
   if (['mag.example', 'www.offroad-zone.com'].includes(u.host) && u.pathname === '/en/graphql') {
     const body = JSON.parse(opts.body);
+    // the real shop sometimes refuses a request once: every 2nd-page request fails the first time
+    if (body.variables && body.variables.p === 2) { fakeUpstream.refused = (fakeUpstream.refused || 0) + 1; if (fakeUpstream.refused % 2 === 1) return new Response('Forbidden', { status: 403 }); }
     if (body.query.includes('pageSize:1)')) return json({ data: { products: { total_count: 3 } } });
     const p = body.variables.p;
     const items = p === 1 ? [
