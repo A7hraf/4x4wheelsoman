@@ -13,6 +13,7 @@ Build with `server/Dockerfile` from the repository root. Environment variables:
 | `APP_SECRET` | long random text; encrypts the Claude key and GitHub token stored in the database |
 | `ALLOWED_ORIGINS` | `https://a7hraf.github.io` (comma-separated) |
 | `CATALOG_URL` | `https://a7hraf.github.io/4x4wheelsoman/assets/js/catalog.js` (website parts assistant) |
+| `PUBLIC_URL` | optional, e.g. `https://api-production-c7248b52.up.railway.app` — shown as the WhatsApp webhook address |
 
 Health check: `/api/health`. Supplier catalogues sync every night at about 03:00 Muscat time
 (`DISABLE_SCHEDULER=1` turns that off). Then set the server address in `assets/js/config.js` and add it
@@ -30,7 +31,18 @@ permission can read.
 ## Supplier catalogues
 Shopify shops (`/products.json`) and Magento shops (GraphQL) are read slowly (1.2 s between pages) with
 an identifying User-Agent; only public https addresses are fetched and redirects to private addresses are
-refused. Sites that block automated access are kept as manual suppliers — no protection is bypassed.
+refused. Sites that block automated access are kept as manual suppliers — no protection is bypassed. Titan
+Performance is read from its sitemap (names, part numbers, links); Ramy Automotive products are added by
+link and re-read daily. Every sync records changes (`supplier_changes`), notifies the people who handle
+suppliers/prices and updates `supplierOut` on products; `/api/public/availability` tells the website what to
+hide or show as "on order".
+
+## AI and WhatsApp
+`/api/ai/v1/messages` speaks the Claude Messages format to the dashboard and forwards to the provider the
+owner chose (Claude, Gemini via its OpenAI-compatible endpoint, or any OpenAI-compatible service).
+WhatsApp uses the Meta Cloud API: free text inside the 24-hour customer-service window, approved templates
+outside it; the webhook (`/api/whatsapp/webhook`) checks the `X-Hub-Signature-256` signature with the app
+secret.
 
 ## Tests
 `npm install && npm test` — runs the API against a real embedded Postgres with fake supplier sites.

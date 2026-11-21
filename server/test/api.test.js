@@ -205,10 +205,10 @@ test('performance and activity per employee', async () => {
 test('supplier detection and catalogue sync (Shopify + Magento), price-change tracking', async () => {
   assert.equal((await call('POST', '/api/suppliers/detect', { url: 'https://shop.example/' }, T.owner)).body.platform, 'shopify');
   assert.equal((await call('POST', '/api/suppliers/detect', { url: 'https://mag.example/en' }, T.owner)).body.platform, 'magento');
-  assert.equal((await call('POST', '/api/suppliers/detect', { url: 'https://manual.example' }, T.owner)).body.platform, 'manual');
+  assert.equal((await call('POST', '/api/suppliers/detect', { url: 'https://manual.example' }, T.owner)).body.platform, 'links');
   assert.equal((await call('POST', '/api/suppliers/detect', { url: 'https://localhost/x' }, T.owner)).body.platform, 'manual');
   fakeUpstream.calls = [];
-  assert.equal((await call('POST', '/api/suppliers/detect', { url: 'https://redir.example/' }, T.owner)).body.platform, 'manual');
+  assert.equal((await call('POST', '/api/suppliers/detect', { url: 'https://redir.example/' }, T.owner)).body.platform, 'links');
   assert.ok(!fakeUpstream.calls.some(c => c.url.includes('10.0.0.5')), 'redirect to an internal address is not followed');
   // after the data was moved online, the owner's four suppliers were added and catalogs copied by themselves
   let st;

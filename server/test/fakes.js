@@ -26,7 +26,36 @@ export async function fakeFetch(url, opts = {}) {
     ] : [null, { sku: 'B-1', name: 'Bumper', url_key: 'bumper', url_suffix: '', stock_status: 'IN_STOCK', small_image: null, price_range: { minimum_price: { final_price: { value: 1800, currency: 'AED' }, regular_price: { value: 1800 } } } }];
     return json({ data: { products: { total_count: 3, page_info: { total_pages: 2 }, items } } });
   }
-  if (['manual.example', 'titanperformanceuae.com', 'www.ramyautomotive.com'].includes(u.host)) return new Response('<html>blocked</html>', { status: 403 });
+  // Titan-like shop: product list only in the sitemap (prices load in the browser)
+  if (u.host === 'titanperformanceuae.com' && u.pathname === '/sitemap.xml') return new Response(`<?xml version="1.0"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+    <url><loc>https://titanperformanceuae.com/shop</loc></url>
+    <url><loc>https://titanperformanceuae.com/product/297814-lp4-pro-led-auxiliary-light-pod-pair</loc></url>
+    <url><loc>https://titanperformanceuae.com/product/49-7813-2-squadron-2-0-pro-black-led-auxiliary-light-pod-pair</loc></url>
+    <url><loc>https://titanperformanceuae.com/product/wolfbox-g900-dash-cam-d9932a</loc></url>
+    ${globalThis.__titanExtra ? '<url><loc>https://titanperformanceuae.com/product/447068-jeep-jl</loc></url>' : ''}</urlset>`, { status: 200, headers: { 'content-type': 'application/xml' } });
+  if (u.host === 'titanperformanceuae.com') return new Response('<html><div id="root"></div></html>', { status: 200, headers: { 'content-type': 'text/html' } });
+  // Ramy-like shop: no open list, but each product page has its details
+  if (u.host === 'www.ramyautomotive.com' && u.pathname === '/aor-extreme-4-in-1-inflate-deflate-system') return new Response(`<html><head><meta property="og:title" content="AOR Extreme 4 in 1 Inflate/Deflate System | Ramy"><meta property="product:price:amount" content="${globalThis.__ramyPrice || '945.00'}"><meta property="product:price:currency" content="AED"></head>
+    <body><h1>AOR Extreme 4 in 1 Inflate/Deflate System</h1><div class="product attribute sku"><div class="value" itemprop="sku">EQ-AIR-01</div></div><span data-price-amount="945">AED 945.00</span>
+    <div class="stock ${globalThis.__ramyOut ? 'unavailable' : 'available'}"><span>${globalThis.__ramyOut ? 'Coming Soon' : 'In stock'}</span></div></body></html>`, { status: 200, headers: { 'content-type': 'text/html' } });
+  if (u.host === 'www.ramyautomotive.com' && u.pathname === '/json-ld-product') return new Response(`<html><script type="application/ld+json">{"@context":"https://schema.org","@type":"Product","name":"Winch 12k","sku":"WN-12","brand":{"name":"Warn"},"image":"https://www.ramyautomotive.com/w.jpg","offers":{"@type":"Offer","price":"3200.50","priceCurrency":"AED","availability":"https://schema.org/OutOfStock"}}</script></html>`, { status: 200 });
+  if (['manual.example', 'www.ramyautomotive.com'].includes(u.host)) return new Response('<html>blocked</html>', { status: 403 });
+  // Google Gemini (OpenAI-compatible)
+  if (u.host === 'generativelanguage.googleapis.com') {
+    const body = JSON.parse(opts.body);
+    fakeUpstream.gemini = (fakeUpstream.gemini || []).concat([body]);
+    const last = body.messages[body.messages.length - 1];
+    if (body.tools && last.role === 'user') return json({ id: 'g1', choices: [{ index: 0, finish_reason: 'tool_calls', message: { role: 'assistant', content: null, tool_calls: [{ id: 'call_1', type: 'function', function: { name: body.tools[0].function.name, arguments: '{"query":"bumper"}' } }] } }], usage: { prompt_tokens: 10, completion_tokens: 5 } });
+    if (body.response_format) return json({ id: 'g3', choices: [{ index: 0, finish_reason: 'stop', message: { role: 'assistant', content: '```json\n{"ok":true}\n```' } }] });
+    return json({ id: 'g2', choices: [{ index: 0, finish_reason: 'stop', message: { role: 'assistant', content: last.role === 'tool' ? 'Found it: ' + last.content.slice(0, 20) : 'Hello from Gemini' } }], usage: { prompt_tokens: 12, completion_tokens: 4 } });
+  }
+  // WhatsApp Cloud API
+  if (u.host === 'graph.facebook.com') {
+    fakeUpstream.wa = (fakeUpstream.wa || []).concat([{ path: u.pathname, body: opts.body ? JSON.parse(opts.body) : null }]);
+    if (/\/messages$/.test(u.pathname)) { const b = JSON.parse(opts.body); if (b.to === '96899999999') return json({ error: { code: 131047, message: 'Re-engagement message' } }, 400); return json({ messaging_product: 'whatsapp', messages: [{ id: 'wamid.' + Math.random().toString(36).slice(2) }] }); }
+    if (/message_templates/.test(u.pathname)) return json({ data: [{ name: 'offer_jl', status: 'APPROVED', language: 'en', category: 'MARKETING', components: [{ type: 'BODY', text: 'Hi {{1}}, {{2}}' }] }] });
+    return json({ display_phone_number: '+968 9000 0000', verified_name: '4x4 Wheels Oman', quality_rating: 'GREEN' });
+  }
   if (u.host === 'redir.example') return new Response('', { status: 302, headers: { location: 'https://10.0.0.5/products.json' } });
   if (u.host === '10.0.0.5') throw new Error('internal address was contacted');
   if (u.host === 'api.anthropic.com') return json({ id: 'msg_1', type: 'message', role: 'assistant', content: [{ type: 'text', text: 'hi' }], model: 'x' }, 200, { 'request-id': 'req_1' });

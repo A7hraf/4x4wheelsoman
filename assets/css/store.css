@@ -429,3 +429,7 @@ select.field { padding-inline-end: 10px; }
   .pa { inset: auto 0 0 0; width: 100%; height: min(86dvh, 640px); border-radius: 20px 20px 0 0; }
 }
 @media print { .pa, .pa-fab { display: none !important; } }
+/* products the supplier has run out of: "on order" */
+.card .bo { display: inline-block; margin-top: 6px; font-size: 11.5px; font-weight: 700; color: var(--amber); }
+.avail.bo { color: var(--amber); }
+.bo-note { margin: 10px 0 0; font-size: 13px; color: var(--text-2); }

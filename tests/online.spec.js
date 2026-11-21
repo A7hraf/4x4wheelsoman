@@ -85,11 +85,12 @@ test('owner: first sign-in with the setup code, then start with demo data', asyn
 test('owner: adds the real suppliers, syncs AM Wrangler, picks a product with a margin', async () => {
   // the server adds the owner's four suppliers by itself and copies their catalogs
   await expect.poll(async () => { await refresh(owner); return owner.evaluate(() => DB.data.suppliers.filter(s => ['AM Wrangler', 'Offroad Zone', 'Titan Performance', 'Ramy Automotive'].includes(s.name)).length); }, { timeout: 20000 }).toBe(4);
-  await expect.poll(() => owner.evaluate(async () => { const st = (await Auth.api('GET', '/api/suppliers/stats')).stats; return Object.values(st).filter(x => x.items && !x.running).length; }), { timeout: 30000 }).toBe(2);
+  await expect.poll(() => owner.evaluate(async () => { const st = (await Auth.api('GET', '/api/suppliers/stats')).stats; return Object.values(st).filter(x => x.items && !x.running).length; }), { timeout: 30000 }).toBe(3); // AM Wrangler, Offroad Zone and Titan's list
   await go(owner, 'suppliers');
   await expect(owner.locator('#supKnown')).toHaveCount(0);
   await expect(owner.locator('.sup-card', { hasText: 'AM Wrangler' })).toContainText('In catalog');
-  await expect(owner.locator('.sup-card', { hasText: 'Ramy Automotive' })).toContainText('Manual');
+  await expect(owner.locator('.sup-card', { hasText: 'Ramy Automotive' })).toContainText('Product links · checked daily'); // Ramy blocks product lists: products are added by link
+  await expect(owner.locator('.sup-card', { hasText: 'Titan Performance' })).toContainText('In catalog'); // Titan's list comes from its sitemap
   await owner.locator('.sup-card', { hasText: 'AM Wrangler' }).click();
   amw = await owner.evaluate(() => DB.data.suppliers.find(s => s.name === 'AM Wrangler').id);
   await owner.locator('#supSync').click();
@@ -261,6 +262,152 @@ test('owner: is told when a supplier changes the price of a product he sells, an
   await expect.poll(() => owner.evaluate((id) => DB.product(id).price, productId)).toBe(194);
   expect(await owner.evaluate((id) => DB.product(id).cost, productId)).toBeCloseTo(138.204, 3);
   await expect(owner.locator('#side a[href="#/sourcing"] .badge')).toHaveText('1');
+});
+
+test('owner: supplier updates are listed; out-of-stock products are hidden or sold "on order" on the website', async ({ browser }) => {
+  await go(owner, 'dashboard');
+  await owner.evaluate(() => { location.hash = '#/sourcing/updates'; });
+  await expect(owner.locator('.upd-chips')).toContainText('Price up: 1');
+  await owner.locator('#updMine').uncheck();
+  await expect(owner.locator('tr', { hasText: 'RS-100' }).first()).toContainText('I sell this');
+  await expect(owner.locator('#updMode')).toHaveValue('backorder');
+  // a product of the website whose supplier ran out, none in the shop
+  const slug = await owner.evaluate(() => { const p = DB.data.products.find(x => x.slug && CATALOG.products.some(c => c.slug === x.slug) && x.online !== false); p.stock = 0; p.supplierOut = true; p.outMode = 'default'; p.backorderDays = 12; DB.save(); return p.slug; });
+  await owner.evaluate(() => Auth.flush());
+  const av = async () => (await (await fetch(API + '/api/public/availability')).json()).items[slug];
+  await expect.poll(av).toEqual({ m: 'backorder', d: 12 });
+  const ctx = await onlineContext(browser);
+  await ctx.route(/\/index\.html|\/$/, async (r) => { const res = await r.fetch(); r.fulfill({ response: res, body: (await res.text()).replace("connect-src 'self' https:", `connect-src 'self' https: ${API}`) }); });
+  const shop = await ctx.newPage(); const shopErrors = watchErrors(shop);
+  await shop.goto('index.html#/p/' + slug);
+  await expect(shop.locator('.avail.bo')).toContainText('on order, about 12 days');
+  await expect(shop.locator('.bo-note')).toContainText('delivery in about 12 days');
+  // the owner decides to hide it while the supplier has none
+  await owner.locator('#updMode').selectOption('hide');
+  await owner.evaluate(() => Auth.flush());
+  await expect.poll(av).toEqual({ m: 'hide' });
+  await shop.goto('index.html#/'); await shop.reload();
+  await expect(shop.locator(`a[href="#/p/${slug}"]`)).toHaveCount(0);
+  await owner.locator('#updMode').selectOption('backorder');
+  await owner.evaluate(() => Auth.flush());
+  expect(shopErrors).toEqual([]);
+  await ctx.close();
+});
+
+test('employee: "My work" shows their tasks and orders (never shop totals); they are notified and can finish tasks', async () => {
+  const errors = watchErrors(cashier);
+  const ids = await owner.evaluate(async () => {
+    const us = (await Auth.api('GET', '/api/users/brief')).users; const salim = us.find(u => u.name === 'Salim'), khalid = us.find(u => u.name === 'Khalid');
+    const sale = DB.data.sales.find(s => s.channel !== 'shop' && !['completed', 'delivered', 'cancelled', 'refunded'].includes(s.status));
+    sale.assignedTo = salim.id;
+    DB.data.tasks.push({ id: 'tk_e2e1', title: 'Call Hamad about the winch', assignedTo: salim.id, assignedName: 'Salim', due: Date.now() + 3600e3, done: false });
+    DB.data.tasks.push({ id: 'tk_e2e2', title: 'Count the lift kits', assignedTo: khalid.id, assignedName: 'Khalid', done: false });
+    DB.save(); await Auth.flush(); return { sale: sale.no };
+  });
+  await expect.poll(async () => { await refresh(cashier); return cashier.evaluate(() => DB.data.tasks.map(t => t.id)); }, { timeout: 20000 }).toEqual(['tk_e2e1']); // only their own task
+  await go(cashier, 'dashboard');
+  await expect(cashier.locator('.page-head h2')).toContainText('Hello, Salim');
+  await expect(cashier.locator('#view')).toContainText('Call Hamad about the winch');
+  await expect(cashier.locator('#view')).toContainText(ids.sale);
+  for (const k of ['Net sales', 'Gross profit', 'Stock value']) await expect(cashier.locator('.kpi', { hasText: k })).toHaveCount(0);
+  await expect(cashier.locator('#bellBtn .badge')).toBeVisible();
+  await cashier.locator('#bellBtn').click();
+  await expect(cashier.locator('#notePanel')).toContainText('Call Hamad about the winch');
+  await expect(cashier.locator('#notePanel')).toContainText(ids.sale);
+  await cashier.locator('#bellBtn').click();
+  // finishing their own task needs no approval, and the owner is told
+  await cashier.locator('[data-done="tk_e2e1"]').click();
+  await expect(cashier.locator('.toast').last()).toContainText('Done');
+  await expect.poll(async () => { await refresh(owner); return owner.evaluate(() => DB.data.tasks.find(t => t.id === 'tk_e2e1').done); }, { timeout: 20000 }).toBe(true);
+  const notes = await owner.evaluate(async () => (await Auth.api('GET', '/api/notifications')).items.map(n => n.title).join(' | '));
+  expect(notes).toContain('Call Hamad about the winch');
+  expect(errors).toEqual([]);
+  // but they cannot change someone else's task, or see shop-wide numbers
+  const r = await cashier.evaluate(async () => (await Auth.api('POST', '/api/sync', { batch: [{ col: 'tasks', id: 'tk_e2e2', prev: null, data: { id: 'tk_e2e2', title: 'x', done: true } }] })).status);
+  expect(r).toBe('denied');
+  expect(await cashier.evaluate(async () => { try { await Auth.api('GET', '/api/team/stats'); return 'ok'; } catch (e) { return e.status; } })).toBe(403);
+});
+
+test('AI: the owner connects free Gemini; an employee\'s AI only gets what the employee may see', async () => {
+  await go(owner, 'settings');
+  await owner.locator('#aiProv button[data-k="gemini"]').click();
+  await owner.locator('#ai_key').fill('AIza-test-key');
+  await owner.locator('#ai_save').click();
+  await expect(owner.locator('.toast').last()).toContainText('AI connected');
+  await expect(owner.locator('#set-ai .card-h .pill')).toContainText('ON · Google Gemini');
+  await expect(owner.locator('#set-ai')).toContainText('may use what is sent on the free plan');
+
+  const errors = watchErrors(cashier);
+  await refresh(cashier);
+  await go(cashier, 'advisor');
+  await expect(cashier.locator('.page-head h2')).toContainText('AI assistant');
+  await expect(cashier.locator('.ring')).toHaveCount(0); // no health score / shop totals
+  await expect(cashier.locator('#genRep')).toHaveCount(0);
+  const req = cashier.waitForRequest(r => r.url().endsWith('/api/ai/v1/messages'));
+  await cashier.locator('#chatQ').fill('find a bumper');
+  await cashier.locator('#chatSend').click();
+  const body = JSON.parse((await req).postData());
+  const tools = body.tools.map(t => t.name);
+  expect(tools).toContain('search_products');
+  expect(tools).toContain('my_performance');
+  for (const n of ['sales_breakdown', 'team_performance', 'supplier_updates', 'add_expense', 'create_employee', 'create_purchase_order', 'prepare_campaign']) expect(tools).not.toContain(n);
+  const snap = body.messages[0].content;
+  expect(snap).toContain('"employee":"Salim"');
+  expect(snap).not.toContain('net_sales');
+  expect(body.system).toContain('Never give shop-wide totals');
+  await expect(cashier.locator('.msg.assistant').last()).toContainText('Found it:', { timeout: 20000 });
+  // the product search the AI ran for the cashier has no costs in it
+  const res = await cashier.evaluate(() => AI.runTool('search_products', { query: 'bumper' }));
+  expect(res.length).toBeGreaterThan(0);
+  expect(res.every(p => p.cost === undefined && p.margin_pct === undefined)).toBe(true);
+  expect(errors).toEqual([]);
+});
+
+test('WhatsApp Business: owner connects it; customer messages arrive in the Inbox; bills and offers go from the shop number', async () => {
+  await go(owner, 'settings');
+  await expect(owner.locator('#wa_pill')).toHaveText('Not connected');
+  await expect(owner.locator('#wa_hook')).toHaveValue(API + '/api/whatsapp/webhook');
+  await owner.locator('#wa_pid').fill('123456789012');
+  await owner.locator('#wa_waba').fill('987654321098');
+  await owner.locator('#wa_tok').fill('EAA-test-token');
+  await owner.locator('#wa_sec').fill('app-secret-e2e');
+  await owner.locator('#wa_bt').fill('order_update');
+  await owner.locator('#wa_save').click();
+  await expect(owner.locator('#wa_pill')).toContainText('Connected · +968 9000 0000');
+  // a customer writes to the shop (Meta calls the webhook, signed with the app secret)
+  const payload = JSON.stringify({ entry: [{ changes: [{ value: { contacts: [{ wa_id: '96877712345', profile: { name: 'Hamad' } }], messages: [{ id: 'wamid.e2e1', from: '96877712345', timestamp: String(Math.floor(Date.now() / 1000)), type: 'text', text: { body: 'Do you have BP-51 for LC300?' } }] } }] }] });
+  const sig = 'sha256=' + require('crypto').createHmac('sha256', 'app-secret-e2e').update(payload).digest('hex');
+  const bad = await fetch(API + '/api/whatsapp/webhook', { method: 'POST', headers: { 'content-type': 'application/json', 'x-hub-signature-256': 'sha256=00' }, body: payload });
+  expect(bad.status).toBe(403);
+  const ok = await fetch(API + '/api/whatsapp/webhook', { method: 'POST', headers: { 'content-type': 'application/json', 'x-hub-signature-256': sig }, body: payload });
+  expect(ok.status).toBe(200);
+  await refresh(owner);
+  await go(owner, 'whatsapp');
+  await expect(owner.locator('#side a[href="#/whatsapp"] .badge')).toHaveText('1');
+  await owner.locator('#wa_inboxTab').click();
+  await owner.locator('.wa-conv', { hasText: 'Hamad' }).click();
+  await expect(owner.locator('.wa-m.in')).toContainText('BP-51 for LC300');
+  await expect(owner.locator('.wa-th-h .pill')).toHaveText('Can reply');
+  await owner.locator('#wa_txt').fill('Yes, in stock. Come today!');
+  await owner.locator('#wa_txt').press('Enter');
+  await expect(owner.locator('.wa-m.out')).toContainText('Yes, in stock');
+  // the new number became a customer, not signed up for offers
+  await expect.poll(async () => { await refresh(owner); return owner.evaluate(() => { const c = DB.data.customers.find(x => x.phone === '+96877712345'); return c && [c.name, c.optIn]; }); }, { timeout: 15000 }).toEqual(['Hamad', false]);
+  // a bill goes from the shop's number (approved template outside the 24-hour window)
+  const sale = await owner.evaluate(() => { const s = DB.data.sales.find(x => x.phone && x.items.length && !/99999999/.test(x.phone)); BH.sendBill(s); return { no: s.no, wa: (s.phone.replace(/\D/g, '').length === 8 ? '968' : '') + s.phone.replace(/\D/g, '') }; });
+  await expect(owner.locator('.toast').last()).toContainText('Sent on WhatsApp');
+  const sent = await owner.evaluate(async (wa) => (await Auth.api('GET', '/api/whatsapp/messages?wa=' + wa)).items, sale.wa);
+  expect(sent.some(m => m.direction === 'out' && m.kind === 'bill' && m.status === 'sent')).toBe(true);
+  // an offer to chosen customers with an approved Marketing template
+  await go(owner, 'whatsapp');
+  await owner.locator('#wa_api').click();
+  await expect(owner.locator('#ac_t')).toContainText('offer_jl');
+  await owner.locator('#ac_a').selectOption('workshop');
+  await owner.locator('[data-ap="1"]').fill('15% off Warn winches this week');
+  await expect(owner.locator('#ac_go')).toBeEnabled();
+  await owner.locator('#ac_go').click();
+  await expect(owner.locator('#ac_prog')).toContainText('finished ✓', { timeout: 30000 });
+  await owner.locator('.overlay [data-close]').first().click();
 });
 
 test('owner: performance and activity per employee; sign out works', async () => {

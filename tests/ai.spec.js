@@ -27,7 +27,8 @@ test('advisor looks up real records with tools and answers from them', async ({ 
   expect(calls[0].headers['authorization']).toBe('Bearer ' + API_KEY); // the SDK 1.x sends the key as a Bearer token
   expect(calls[0].headers['anthropic-dangerous-direct-browser-access']).toBe('true');
   expect(calls[0].body.model).toBe('claude-opus-5-5');
-  expect(calls[0].body.tools.map(t => t.name)).toEqual(['search_products', 'customer_history', 'find_orders', 'sales_breakdown', 'reorder_plan', 'open_quotes']);
+  expect(calls[0].body.tools.map(t => t.name)).toEqual(['search_products', 'customer_history', 'find_orders', 'sales_breakdown', 'reorder_plan', 'open_quotes', 'customer_segments', 'stock_status',
+    'create_product', 'adjust_stock', 'create_purchase_order', 'add_expense', 'prepare_campaign', 'make_pdf_report']);
   expect(calls[0].body.messages[0].content).toContain('Business snapshot (JSON)');
   // request 2: the tool call and its result were sent back
   const m = calls[1].body.messages;
@@ -43,17 +44,26 @@ test('advisor looks up real records with tools and answers from them', async ({ 
 
 test('every advisor tool returns sensible data', async ({ page }) => {
   await setupAdmin(page);
-  const r = await page.evaluate(() => ({
-    products: AI.runTool('search_products', { query: 'bp-51 y62' }),
-    orders: AI.runTool('find_orders', { channel: 'online', status: 'new', limit: 5 }),
-    unpaid: AI.runTool('find_orders', { unpaid_only: true }),
-    byCat: AI.runTool('sales_breakdown', { days: 30, by: 'category' }),
-    byDay: AI.runTool('sales_breakdown', { days: 90, by: 'weekday' }),
-    plan: AI.runTool('reorder_plan', {}),
-    quotes: AI.runTool('open_quotes', {}),
-    bad: AI.runTool('nope', {}),
-    net30: AI.snapshot(30).totals.net_sales
+  const r = await page.evaluate(async () => ({
+    products: await AI.runTool('search_products', { query: 'bp-51 y62' }),
+    orders: await AI.runTool('find_orders', { channel: 'online', status: 'new', limit: 5 }),
+    unpaid: await AI.runTool('find_orders', { unpaid_only: true }),
+    byCat: await AI.runTool('sales_breakdown', { days: 30, by: 'category' }),
+    byDay: await AI.runTool('sales_breakdown', { days: 90, by: 'weekday' }),
+    plan: await AI.runTool('reorder_plan', {}),
+    quotes: await AI.runTool('open_quotes', {}),
+    segs: await AI.runTool('customer_segments', {}),
+    stock: await AI.runTool('stock_status', {}),
+    team: await AI.runTool('team_performance', {}),
+    bad: await AI.runTool('nope', {}),
+    net30: AI.snapshot(30).totals.net_sales,
+    customers: DB.data.customers.length
   }));
+  expect(r.segs.customers).toBe(r.customers);
+  expect(r.segs.top_customers.length).toBeGreaterThan(0);
+  expect(r.segs.top_customers[0].spent).toBeGreaterThanOrEqual(r.segs.top_customers[r.segs.top_customers.length - 1].spent);
+  expect(Array.isArray(r.stock.out_of_stock)).toBe(true);
+  expect(r.team.error).toBe('Not allowed for this user'); // the team only exists online
   expect(r.products[0].name).toContain('Patrol Y62');
   expect(r.orders.orders.every(o => o.channel === 'online' && o.status === 'new')).toBe(true);
   expect(r.unpaid.orders.every(o => o.paid === false)).toBe(true);
@@ -179,4 +189,51 @@ test('dashboard: ask a question or tap a suggestion → the AI Advisor answers i
   await page.locator('[data-ccq]').first().click();
   await expect(page.locator('.msg.user').last()).toHaveText('What should I focus on this week?');
   await expect.poll(() => calls.length).toBe(2);
+});
+
+test('AI actions happen only after the owner confirms them', async ({ page, context }) => {
+  const errors = watchErrors(page);
+  let step = 0;
+  await fakeClaude(context, (body) => {
+    const last = body.messages[body.messages.length - 1];
+    const tr = Array.isArray(last.content) && last.content.find(c => c.type === 'tool_result');
+    if (!tr) {
+      step++;
+      if (step === 1) return { blocks: [{ type: 'text', text: 'Adding it.' }, { type: 'tool_use', id: 'toolu_a', name: 'create_product', input: { name: 'Test Snorkel LC79', price: 89.5, stock: 3, brand: 'Safari', category: 'performance' } }], stop: 'tool_use' };
+      if (step === 2) return { blocks: [{ type: 'tool_use', id: 'toolu_b', name: 'add_expense', input: { description: 'Shop sign', amount: 40, category: 'marketing' } }], stop: 'tool_use' };
+      return { blocks: [{ type: 'tool_use', id: 'toolu_c', name: 'make_pdf_report', input: { title: 'Weekly sales', markdown: '# Weekly sales\n\n| Item | Qty |\n|---|---|\n| BP-51 | 3 |\n\n- مبيعات جيدة' } }], stop: 'tool_use' };
+    }
+    const out = JSON.parse(tr.content);
+    return { blocks: [{ type: 'text', text: 'RESULT ' + JSON.stringify(out) }] };
+  });
+  await setupAdmin(page);
+  await setApiKey(page);
+  await go(page, 'advisor');
+  const ask = async (q) => { await page.locator('#chatQ').fill(q); await page.locator('#chatSend').click(); };
+  const before = await page.evaluate(() => ({ p: DB.data.products.length, e: DB.data.expenses.length }));
+  // 1) confirmed → the product exists, with its opening stock
+  await ask('add a snorkel');
+  await expect(page.locator('.modal .ai-act')).toContainText('Test Snorkel LC79');
+  await page.locator('#aiYes').click();
+  await expect(page.locator('.msg.assistant').last()).toContainText('RESULT {"ok":true', { timeout: 20000 });
+  const p = await page.evaluate(() => DB.data.products.find(x => x.name === 'Test Snorkel LC79'));
+  expect(p.price).toBe(89.5); expect(p.stock).toBe(3); expect(p.brand).toBe('Safari');
+  // 2) refused → nothing changes
+  await ask('add an expense');
+  await expect(page.locator('.modal .ai-act')).toContainText('Shop sign');
+  await page.locator('#aiNo').click();
+  await expect(page.locator('.msg.assistant').last()).toContainText('"cancelled":true', { timeout: 20000 });
+  expect(await page.evaluate(() => DB.data.expenses.length)).toBe(before.e);
+  // 3) PDF report → a real PDF file is downloaded
+  await ask('pdf please');
+  await expect(page.locator('.modal .ai-prev table')).toHaveCount(1);
+  const dl = page.waitForEvent('download');
+  await page.locator('#aiYes').click();
+  const file = await dl;
+  expect(file.suggestedFilename()).toBe('Weekly sales.pdf');
+  const buf = require('fs').readFileSync(await file.path());
+  expect(buf.slice(0, 5).toString()).toBe('%PDF-');
+  expect(buf.length).toBeGreaterThan(3000);
+  expect(await page.evaluate(() => DB.data.products.length)).toBe(before.p + 1);
+  expect(errors).toEqual([]);
 });

@@ -161,7 +161,7 @@
   let db = null;
   let persist = null;
   function migrate(d) {
-    d.quotes = d.quotes || []; d.held = d.held || []; d.campaigns = d.campaigns || []; d.waLog = d.waLog || [];
+    d.quotes = d.quotes || []; d.held = d.held || []; d.campaigns = d.campaigns || []; d.waLog = d.waLog || []; d.tasks = d.tasks || [];
     d.secrets = Object.assign({ aiKey: '', ghToken: '' }, d.secrets || {});
     d.settings.templates = Object.assign({}, DEFAULT_TEMPLATES, d.settings.templates || {});
     d.settings.qpay = Object.assign({ enabled: true, limit: 500, installments: 4, feePct: 0, merchantId: '', payLink: 'https://qpay.om/' }, d.settings.qpay || {});

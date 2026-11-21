@@ -4,7 +4,10 @@
 import http from 'node:http';
 import crypto from 'node:crypto';
 import { pathToFileURL } from 'node:url';
-import { createPool, migrate, readState, changesSince, submit, decide, importAll, logActivity, evaluate } from './store.js';
+import { createPool, migrate, readState, changesSince, submit, decide, importAll, logActivity, evaluate, hooks } from './store.js';
+import * as N from './notify.js';
+import { makeAIFetch, PROVIDERS } from './aiproxy.js';
+import { createWA } from './whatsapp.js';
 import * as A from './auth.js';
 import { MODULES, LEVELS, PRESETS, atLeast, anyAtLeast, isOwner, seesCosts } from './perms.js';
 import * as S from './suppliers.js';
@@ -28,7 +31,19 @@ export function createApp({ pool, env = process.env, fetchImpl = globalThis.fetc
   const origins = String(env.ALLOWED_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean);
   const kvGet = async (k) => { const r = await pool.query('SELECT value FROM kv WHERE key=$1', [k]); return r.rows[0] ? r.rows[0].value : null; };
   const kvSet = (k, v) => pool.query('INSERT INTO kv (key,value) VALUES ($1,$2) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value', [k, JSON.stringify(v)]);
-  const aiKey = async () => box.open(await kvGet('aiKey')) || env.ANTHROPIC_API_KEY || '';
+  // AI: the owner picks a provider (Claude, Gemini free tier, or any OpenAI-compatible service)
+  const keyName = (p) => (p === 'claude' || !p ? 'aiKey' : 'aiKey:' + p);
+  const aiCfg = async () => {
+    const c = Object.assign({ provider: 'claude', model: '', baseUrl: '' }, (await kvGet('aiCfg')) || {});
+    c.key = box.open(await kvGet(keyName(c.provider))) || (c.provider === 'claude' ? env.ANTHROPIC_API_KEY || '' : '');
+    return c;
+  };
+  const aiKey = async () => (await aiCfg()).key;
+  const aiFetch = makeAIFetch(fetchImpl, aiCfg);
+  const WA = createWA({ pool, kvGet, kvSet, box, fetchImpl });
+  hooks.afterApply = async (db, u, plan) => { await N.afterApply(db, u, plan); if ((plan || []).some(p => p.change.col === 'products' || p.change.col === 'meta')) S.clearAvailabilityCache(); };
+  hooks.onRequest = (db, u, summary) => N.onRequest(db, u, summary);
+  hooks.onDecide = (db, a, ok, note) => N.onDecide(db, a, ok, note);
   const aiHits = new Map();
 
   function corsHeaders(req) {
@@ -56,7 +71,11 @@ export function createApp({ pool, env = process.env, fetchImpl = globalThis.fetc
   const counts = async (u) => {
     const q = isOwner(u) ? await pool.query("SELECT COUNT(*)::int AS n FROM approvals WHERE status='pending'") : await pool.query("SELECT COUNT(*)::int AS n FROM approvals WHERE status='pending' AND user_id=$1", [u.id]);
     const mine = await pool.query("SELECT COALESCE(MAX(decided_at),0)::bigint AS t FROM approvals WHERE user_id=$1 AND status<>'pending'", [u.id]);
-    return { pending: q.rows[0].n, decidedAt: Number(mine.rows[0].t), ai: !!(await aiKey()) };
+    const nt = await N.unread(pool, u);
+    const out = { pending: q.rows[0].n, decidedAt: Number(mine.rows[0].t), ai: !!(await aiKey()), notes: nt.n, notesAt: Number(nt.last) };
+    if (isOwner(u) || anyAtLeast(u, ['suppliers', 'pricing'], 'view')) out.supplierChanges = await S.unseenChanges(pool, u.id);
+    if (isOwner(u) || atLeast(u, 'whatsapp', 'view')) out.waUnread = await WA.unreadCount();
+    return out;
   };
 
   // ---------- route table ----------
@@ -107,12 +126,24 @@ export function createApp({ pool, env = process.env, fetchImpl = globalThis.fetc
   on('POST', '/api/import', async ({ u, b }) => { owner(u); const count = await importAll(pool, u, b.data); kick(); return { ok: true, count }; });
 
   // ---------- secrets (owner) ----------
-  on('GET', '/api/secrets', async ({ u }) => { owner(u); return { ghToken: box.open(await kvGet('ghToken')), hasAiKey: !!(await aiKey()) }; });
+  const aiInfo = async () => { const c = await aiCfg(); const has = {}; for (const p of Object.keys(PROVIDERS)) has[p] = !!box.open(await kvGet(keyName(p))) || (p === 'claude' && !!env.ANTHROPIC_API_KEY); return { provider: c.provider, model: c.model, baseUrl: c.baseUrl, hasKey: has, providers: PROVIDERS }; };
+  on('GET', '/api/secrets', async ({ u }) => { owner(u); return { ghToken: box.open(await kvGet('ghToken')), hasAiKey: !!(await aiKey()), ai: await aiInfo() }; });
   on('PUT', '/api/secrets', async ({ u, b }) => {
     owner(u);
     if (typeof b.ghToken === 'string') await kvSet('ghToken', b.ghToken.trim() ? box.seal(b.ghToken.trim().slice(0, 300)) : '');
-    if (typeof b.aiKey === 'string') { await kvSet('aiKey', b.aiKey.trim() ? box.seal(b.aiKey.trim().slice(0, 300)) : ''); await logActivity(pool, u, 'settings', 'ai', b.aiKey.trim() ? 'Saved the Claude API key on the server' : 'Removed the Claude API key'); }
-    return { ok: true, hasAiKey: !!(await aiKey()) };
+    if (b.aiProvider !== undefined || b.aiModel !== undefined || b.aiBaseUrl !== undefined) {
+      const c = Object.assign({ provider: 'claude', model: '', baseUrl: '' }, (await kvGet('aiCfg')) || {});
+      if (b.aiProvider !== undefined) { need(PROVIDERS[b.aiProvider], 400, 'Unknown AI provider'); c.provider = b.aiProvider; }
+      if (typeof b.aiModel === 'string') { need(/^[\w.:\/-]{0,100}$/.test(b.aiModel.trim()), 400, 'Model name: letters, numbers, dots, dashes'); c.model = b.aiModel.trim(); }
+      if (typeof b.aiBaseUrl === 'string') { need(!b.aiBaseUrl.trim() || S.safeUrl(b.aiBaseUrl.trim()), 400, 'Use a public https:// address'); c.baseUrl = b.aiBaseUrl.trim(); }
+      await kvSet('aiCfg', c);
+    }
+    if (typeof b.aiKey === 'string') {
+      const prov = b.aiKeyFor || ((await kvGet('aiCfg')) || {}).provider || 'claude'; need(PROVIDERS[prov], 400, 'Unknown AI provider');
+      await kvSet(keyName(prov), b.aiKey.trim() ? box.seal(b.aiKey.trim().slice(0, 400)) : '');
+      await logActivity(pool, u, 'settings', 'ai', (b.aiKey.trim() ? 'Saved the AI key for ' : 'Removed the AI key for ') + PROVIDERS[prov].label);
+    }
+    return { ok: true, hasAiKey: !!(await aiKey()), ai: await aiInfo() };
   });
 
   // ---------- team ----------
@@ -145,8 +176,19 @@ export function createApp({ pool, env = process.env, fetchImpl = globalThis.fetc
 
   on('GET', '/api/team/stats', async ({ u, q }) => {
     need(isOwner(u) || atLeast(u, 'team', 'view'), 403, 'No access to the team.');
-    const days = Math.min(366, Math.max(1, Number(q.get('days')) || 30)); const since = now() - days * 86400000;
-    const users = (await pool.query('SELECT id, name, username, role, active, last_seen FROM users ORDER BY created_at')).rows;
+    return teamStats(u, Number(q.get('days')), null);
+  });
+  // an employee's own numbers (for "My work")
+  on('GET', '/api/me/stats', async ({ u, q }) => { const r = await teamStats(u, Number(q.get('days')), u.id, true); return { days: r.days, me: r.users[0] || null }; });
+  on('GET', '/api/users/brief', async ({ u }) => {
+    need(isOwner(u) || anyAtLeast(u, ['orders', 'pos', 'quotes', 'team'], 'edit') || atLeast(u, 'team', 'view'), 403, 'No access.');
+    return { users: (await pool.query('SELECT id, name FROM users WHERE active ORDER BY name')).rows };
+  });
+  on('GET', '/api/notifications', async ({ u, q }) => ({ items: await N.list(pool, u, Number(q.get('limit')) || 50), unread: (await N.unread(pool, u)).n }));
+  on('POST', '/api/notifications/read', async ({ u, b }) => { await N.markRead(pool, u, b.all ? 'all' : b.ids); return { ok: true }; });
+  async function teamStats(u, daysIn, onlyId, self) {
+    const days = Math.min(366, Math.max(1, daysIn || 30)); const since = now() - days * 86400000;
+    const users = (await pool.query('SELECT id, name, username, role, active, last_seen FROM users ' + (onlyId ? 'WHERE id=$1 ' : '') + 'ORDER BY created_at', onlyId ? [onlyId] : [])).rows;
     const sales = (await pool.query(`SELECT data->>'createdBy' AS uid, data->>'channel' AS ch, COUNT(*)::int AS n,
         SUM(CASE WHEN data->>'status' IN ('cancelled','refunded') THEN 0 ELSE (data->>'total')::numeric END) AS revenue,
         SUM(CASE WHEN data->>'status' IN ('cancelled','refunded') THEN 1 ELSE 0 END)::int AS cancelled,
@@ -161,7 +203,7 @@ export function createApp({ pool, env = process.env, fetchImpl = globalThis.fetc
     const appr = (await pool.query(`SELECT user_id AS uid, status, COUNT(*)::int AS n FROM approvals WHERE created_at >= $1 GROUP BY 1,2`, [since])).rows;
     const daily = (await pool.query(`SELECT data->>'createdBy' AS uid, ((data->>'date')::bigint / 86400000) AS d, COUNT(*)::int AS n, SUM((data->>'total')::numeric) AS v
       FROM rows WHERE col='sales' AND NOT deleted AND (data->>'date')::bigint >= $1 AND data->>'status' NOT IN ('cancelled','refunded') GROUP BY 1,2`, [since])).rows;
-    const showMoney = seesCosts(u) || atLeast(u, 'reports', 'view') || isOwner(u);
+    const showMoney = self || seesCosts(u) || atLeast(u, 'reports', 'view') || isOwner(u);
     return {
       days, users: users.map(x => {
         const mine = (arr) => arr.filter(r => r.uid === x.id);
@@ -180,7 +222,7 @@ export function createApp({ pool, env = process.env, fetchImpl = globalThis.fetc
         };
       })
     };
-  });
+  }
   on('GET', '/api/activity', async ({ u, q }) => {
     const all = isOwner(u) || atLeast(u, 'team', 'view');
     const who = all ? q.get('user') : u.id;
@@ -227,11 +269,23 @@ export function createApp({ pool, env = process.env, fetchImpl = globalThis.fetc
   // ---------- suppliers & catalogue ----------
   const canSource = (u) => isOwner(u) || anyAtLeast(u, ['suppliers', 'pricing', 'purchases'], 'view');
   const canSync = (u) => isOwner(u) || anyAtLeast(u, ['suppliers'], 'edit');
-  const hidePrices = (u, x) => { if (seesCosts(u)) return x; x.items.forEach(i => { i.price = null; i.compareAt = null; i.prevPrice = null; i.also.forEach(a => { a.price = null; }); }); return x; };
+  const hidePrices = (u, x) => { if (seesCosts(u)) return x; (x.items || []).forEach(i => { i.price = null; i.compareAt = null; i.prevPrice = null; i.oldPrice = null; (i.also || []).forEach(a => { a.price = null; }); }); return x; };
   on('GET', '/api/catalog', async ({ u, q }) => { need(canSource(u), 403, 'No access to supplier catalogues.'); return hidePrices(u, await S.searchCatalog(pool, Object.fromEntries(q))); });
   on('POST', '/api/catalog/lookup', async ({ u, b }) => { need(canSource(u), 403, 'No access to supplier catalogues.'); return hidePrices(u, { items: (await S.lookup(pool, b.refs)).map(i => Object.assign(i, { also: [] })) }); });
   on('GET', '/api/suppliers/stats', async ({ u }) => { need(canSource(u), 403, 'No access.'); return { stats: await S.supplierStats(pool) }; });
   on('POST', '/api/suppliers/detect', async ({ u, b }) => { need(canSync(u), 403, 'No permission.'); return S.detect(String(b.url || ''), fetchImpl); });
+  const supRow = async (id) => { const r = (await pool.query("SELECT data FROM rows WHERE col='suppliers' AND id=$1 AND NOT deleted", [id])).rows[0]; need(r, 404, 'Supplier not found.'); return r.data; };
+  // read one product page (name, code, price, stock) to fill the "add from link" form
+  on('POST', '/api/suppliers/read-link', async ({ u, b }) => {
+    need(isOwner(u) || anyAtLeast(u, ['suppliers', 'pricing', 'inventory', 'purchases'], 'request'), 403, 'No permission.');
+    const p = await S.readProductPage(String(b.url || ''), fetchImpl);
+    const host = (x) => { try { return new URL(x).hostname.replace(/^www\./, ''); } catch { return ''; } };
+    const sup = (await S.supplierRows(pool)).find(s => s && host(s.website) === host(b.url));
+    return Object.assign(p, { supplierId: sup ? sup.id : null });
+  });
+  on('POST', '/api/suppliers/:id/import', async ({ u, p, b }) => { need(canSync(u), 403, 'No permission.'); return S.importList(pool, await supRow(p.id), b.items, !!b.replace); });
+  on('GET', '/api/supplier-changes', async ({ u, q }) => { need(canSource(u), 403, 'No access.'); return hidePrices(u, { items: await S.changes(pool, Object.fromEntries(q)) }); });
+  on('POST', '/api/supplier-changes/seen', async ({ u }) => { await S.markChangesSeen(pool, u.id); return { ok: true }; });
   on('POST', '/api/suppliers/:id/sync', async ({ u, p }) => {
     need(canSync(u), 403, 'No permission to sync suppliers.');
     const r = (await pool.query("SELECT data FROM rows WHERE col='suppliers' AND id=$1 AND NOT deleted", [p.id])).rows[0];
@@ -239,16 +293,42 @@ export function createApp({ pool, env = process.env, fetchImpl = globalThis.fetc
     return S.syncSupplier(pool, r.data, fetchImpl, u);
   });
 
+  // ---------- WhatsApp Business ----------
+  const waView = (u) => isOwner(u) || atLeast(u, 'whatsapp', 'view');
+  on('GET', '/api/whatsapp/config', async ({ u }) => { need(waView(u) || anyAtLeast(u, ['orders', 'pos', 'quotes'], 'view'), 403, 'No access.'); const c = await WA.publicCfg(); if (!isOwner(u)) delete c.verifyToken; return Object.assign(c, { webhook: (env.PUBLIC_URL || '') + '/api/whatsapp/webhook' }); });
+  on('PUT', '/api/whatsapp/config', async ({ u, b }) => { owner(u); const c = await WA.save(b); await logActivity(pool, u, 'settings', 'whatsapp', 'Updated WhatsApp settings'); return c; });
+  on('POST', '/api/whatsapp/test', async ({ u }) => { owner(u); return WA.test(); });
+  on('GET', '/api/whatsapp/templates', async ({ u }) => { need(waView(u), 403, 'No access.'); return WA.templates(); });
+  on('POST', '/api/whatsapp/send', async ({ u, b }) => {
+    const marketing = b.kind === 'campaign';
+    need(isOwner(u) || (marketing ? atLeast(u, 'whatsapp', 'edit') : anyAtLeast(u, ['whatsapp', 'orders', 'pos', 'quotes', 'qpay', 'customers'], 'request')), 403, 'No permission to send WhatsApp messages.');
+    return WA.send(u, b);
+  });
+  on('POST', '/api/whatsapp/campaign', async ({ u, b }) => { need(isOwner(u) || atLeast(u, 'whatsapp', 'edit'), 403, 'No permission to send campaigns.'); return WA.startCampaign(u, b); });
+  on('GET', '/api/whatsapp/campaign/:id', async ({ u, p }) => { need(waView(u), 403, 'No access.'); return WA.campaign(p.id) || { done: true, missing: true }; });
+  on('GET', '/api/whatsapp/conversations', async ({ u }) => { need(waView(u), 403, 'No access.'); return { items: await WA.conversations() }; });
+  on('GET', '/api/whatsapp/messages', async ({ u, q }) => { need(waView(u), 403, 'No access.'); return { items: await WA.messages(q.get('wa')), open: await WA.windowOpen(String(q.get('wa') || '').replace(/\D/g, '')) }; });
+  on('POST', '/api/whatsapp/read', async ({ u, b }) => { need(waView(u), 403, 'No access.'); await WA.markRead(b.wa); return { ok: true }; });
+
+  // ---------- AI provider test (owner) ----------
+  on('POST', '/api/ai/test', async ({ u }) => {
+    owner(u);
+    const r = await aiFetch('https://api.anthropic.com/v1/messages', { method: 'POST', headers: { 'content-type': 'application/json', 'anthropic-version': '2023-06-01' }, body: JSON.stringify({ model: PROVIDERS.claude.model, max_tokens: 60, messages: [{ role: 'user', content: 'Reply with: OK, ready.' }] }) });
+    const j = await r.json().catch(() => ({}));
+    need(r.ok, r.status === 401 ? 400 : (r.status || 502), (j.error && j.error.message) || 'The AI provider did not answer.');
+    return { ok: true, text: ((j.content || []).find(c => c.type === 'text') || {}).text || '', model: j.model };
+  });
+
   // ---------- Claude proxy (dashboard AI) ----------
   async function aiProxy(req, res, u) {
     need(isOwner(u) || atLeast(u, 'ai', 'view') || anyAtLeast(u, ['quotes', 'inventory', 'whatsapp'], 'edit'), 403, 'No permission to use the AI.');
-    const key = await aiKey(); need(key, 412, 'The owner has not added a Claude API key yet (Settings → AI).');
+    const key = await aiKey(); need(key, 412, 'The owner has not added an AI key yet (Settings → AI).');
     const t = now(); const h = (aiHits.get(u.id) || []).filter(x => t - x < 60000); h.push(t); aiHits.set(u.id, h);
     need(h.length <= (isOwner(u) ? 60 : 30), 429, 'Too many AI requests. Wait a minute.');
     const raw = await new Promise((resolve, reject) => { const c = []; let n = 0; req.on('data', d => { n += d.length; if (n > 2e6) { reject(new HttpError(413, 'Too much data')); req.destroy(); } else c.push(d); }); req.on('end', () => resolve(Buffer.concat(c))); req.on('error', reject); });
-    const fwd = { 'content-type': 'application/json', 'x-api-key': key, 'anthropic-version': String(req.headers['anthropic-version'] || '2023-06-01') };
+    const fwd = { 'content-type': 'application/json', 'anthropic-version': String(req.headers['anthropic-version'] || '2023-06-01') };
     if (req.headers['anthropic-beta']) fwd['anthropic-beta'] = String(req.headers['anthropic-beta']);
-    const upstream = await fetchImpl('https://api.anthropic.com/v1/messages', { method: 'POST', headers: fwd, body: raw });
+    const upstream = await aiFetch('https://api.anthropic.com/v1/messages', { method: 'POST', headers: fwd, body: raw });
     const out = Object.assign({}, baseHeaders, corsHeaders(req), { 'Content-Type': upstream.headers.get('content-type') || 'application/json' });
     ['request-id', 'retry-after'].forEach(k => { const v = upstream.headers.get(k); if (v) out[k] = v; });
     res.writeHead(upstream.status, out);
@@ -262,7 +342,7 @@ export function createApp({ pool, env = process.env, fetchImpl = globalThis.fetc
     const raw = await new Promise((resolve, reject) => { const c = []; let n = 0; req.on('data', d => { n += d.length; if (n > 20000) { reject(new HttpError(413, 'Too much data')); req.destroy(); } else c.push(d); }); req.on('end', () => resolve(Buffer.concat(c))); req.on('error', reject); });
     const headers = new Headers(); for (const [k, v] of Object.entries(req.headers)) if (typeof v === 'string') headers.set(k, v);
     headers.set('CF-Connecting-IP', ipOf(req));
-    const r = await assistantHandle(new Request('https://local' + req.url, { method: req.method, headers, body: req.method === 'POST' ? raw : undefined }), { ANTHROPIC_API_KEY: await aiKey(), ALLOWED_ORIGINS: env.ALLOWED_ORIGINS || '', CATALOG_URL: env.CATALOG_URL || '', MODEL: env.ASSISTANT_MODEL || '' }, fetchImpl);
+    const r = await assistantHandle(new Request('https://local' + req.url, { method: req.method, headers, body: req.method === 'POST' ? raw : undefined }), { ANTHROPIC_API_KEY: (await aiKey()) ? 'via-server' : '', ALLOWED_ORIGINS: env.ALLOWED_ORIGINS || '', CATALOG_URL: env.CATALOG_URL || '', MODEL: env.ASSISTANT_MODEL || '' }, aiFetch);
     const h = {}; r.headers.forEach((v, k) => { h[k] = v; });
     res.writeHead(r.status, h); res.end(Buffer.from(await r.arrayBuffer()));
   }
@@ -271,12 +351,26 @@ export function createApp({ pool, env = process.env, fetchImpl = globalThis.fetc
     const url = new URL(req.url, 'http://x');
     try {
       if (url.pathname === '/api/assistant') return await assistant(req, res);
+      // website: products the supplier ran out of (public, no prices)
+      if (url.pathname === '/api/public/availability' && (req.method === 'GET' || req.method === 'OPTIONS')) {
+        res.writeHead(req.method === 'OPTIONS' ? 204 : 200, Object.assign({ 'Content-Type': 'application/json', 'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'public, max-age=120', 'Access-Control-Allow-Origin': '*' }));
+        return res.end(req.method === 'OPTIONS' ? '' : JSON.stringify(await S.publicAvailability(pool)));
+      }
+      // WhatsApp webhook (Meta): verification and incoming messages, checked with the app secret
+      if (url.pathname === '/api/whatsapp/webhook') {
+        if (req.method === 'GET') { const ch = await WA.verify(url.searchParams); res.writeHead(ch == null ? 403 : 200, { 'Content-Type': 'text/plain' }); return res.end(ch == null ? 'Forbidden' : ch); }
+        if (req.method === 'POST') {
+          const raw = await new Promise((resolve, reject) => { const c = []; let n = 0; req.on('data', d => { n += d.length; if (n > 1e6) { reject(new HttpError(413, 'Too much data')); req.destroy(); } else c.push(d); }); req.on('end', () => resolve(Buffer.concat(c))); req.on('error', reject); });
+          await WA.receive(raw, req.headers['x-hub-signature-256']);
+          res.writeHead(200, { 'Content-Type': 'text/plain' }); return res.end('ok');
+        }
+      }
       if (req.method === 'OPTIONS') { res.writeHead(204, Object.assign({}, baseHeaders, corsHeaders(req))); return res.end(); }
       if (url.pathname === '/api/ai/v1/messages' && req.method === 'POST') { const u = await user(req); return await aiProxy(req, res, u); }
       for (const r of routes) {
         if (r.method !== req.method) continue;
         const m = url.pathname.match(r.re); if (!m) continue;
-        const b = req.method === 'GET' ? {} : await body(req, r.path === '/api/import' ? 8e6 : 2e6);
+        const b = req.method === 'GET' ? {} : await body(req, r.path.endsWith('/import') ? 8e6 : 2e6);
         const open = ['/', '/api/health', '/api/status', '/api/setup', '/api/login', '/api/logout'].includes(url.pathname);
         const u = open ? null : await user(req);
         const out = await r.fn({ req, res, u, b, p: m.groups || {}, q: url.searchParams });
@@ -305,6 +399,7 @@ export async function start(env = process.env) {
   if (env.DISABLE_SCHEDULER !== '1') {
     S.startScheduler(pool, globalThis.fetch);
     S.ensureKnown(pool).then(() => S.autoSync(pool, globalThis.fetch)).catch(e => console.error('auto sync', e.message));
+    setInterval(() => N.remindTasks(pool).catch(e => console.error('task reminders', e.message)), 5 * 60000);
   }
   return { server, pool };
 }

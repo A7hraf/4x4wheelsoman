@@ -146,10 +146,21 @@
     return sdkPromise;
   }
 
+  const staff = () => online() && !Auth.isOwner();
+  function staffPrompt(lang) {
+    const me = Auth.me();
+    return `You are the AI work assistant inside the dashboard of "${D().settings.name}", an off-road / 4x4 parts shop in Oman.
+You are helping ${me.name}, an employee (not the owner). Help them do their job: find products and prices, look up customers and orders they can access, prepare quotes and messages, plan their tasks and follow up orders.
+Only use the data in the conversation and from your tools — they contain exactly what ${me.name} is allowed to see. Never give shop-wide totals, overall sales, profit, costs or other employees' figures; if asked, say that only the owner can see that.
+Actions (adding products, changing stock, tasks…) are only done through your action tools, and each one is confirmed by ${me.name} before it happens.
+Be short and practical. Reply in ${lang === 'ar' ? 'Arabic' : 'the same language the user writes in (Arabic or English)'}.`;
+  }
   function systemPrompt(lang) {
+    if (staff()) return staffPrompt(lang);
     return `You are the AI business advisor inside the management dashboard of "${D().settings.name}", an off-road / 4x4 parts and accessories retailer in Oman with a physical shop and an online store.
 You are talking to the business owner. Ground every statement in the JSON business snapshot provided in the conversation or in results from your tools; quote concrete numbers (currency ${D().settings.currency}, round to whole rials unless precision matters). If something cannot be answered from the data, say what data is missing instead of guessing.
-Use the tools to look up specific products, customers, orders, sales breakdowns and the reorder plan whenever the snapshot is not detailed enough. Do not invent records.
+Use the tools to look up specific products, customers, orders, sales breakdowns, customer segments, team performance, supplier updates and the reorder plan whenever the snapshot is not detailed enough. Do not invent records.
+You can also do jobs with the action tools (add products, change stock, order from suppliers, add expenses, prepare WhatsApp campaigns, give tasks, give orders to employees, create employee accounts, make PDF reports). Every action is shown to the owner to confirm before it happens; describe briefly what you will do, then call the tool.
 Give practical, prioritised recommendations a small retail owner in Oman can act on this week (pricing, stock, purchasing, marketing on Instagram/WhatsApp, staffing, cash flow). Keep it concise and scannable: short headings, bullet points, and small tables where useful.
 Reply in ${lang === 'ar' ? 'Arabic' : 'the same language the owner writes in (Arabic or English)'}.`;
   }
@@ -189,14 +200,138 @@ Reply in ${lang === 'ar' ? 'Arabic' : 'the same language the owner writes in (Ar
     { name: 'reorder_plan', description: 'Products that need reordering based on sales velocity, supplier lead time, target days of cover and open purchase orders, with suggested quantities and cost.', input_schema: { type: 'object', properties: {} } },
     { name: 'open_quotes', description: 'Open customer quotes (new / sent / accepted) with items, values and age.', input_schema: { type: 'object', properties: {} } }
   ];
-  function runTool(name, input) {
+  // ---------- what each person's AI may look up or do ----------
+  const can = (m, l) => !online() || Auth.can(m, l || 'view');
+  const anyCan = (mods, l) => mods.some(m => can(m, l));
+  const seesCosts = () => !online() || Auth.seesCosts();
+  const isOwner = () => !online() || Auth.isOwner();
+  const READ_PERM = {
+    search_products: () => true,
+    customer_history: () => anyCan(['customers', 'orders', 'pos', 'quotes']),
+    find_orders: () => anyCan(['orders', 'pos']),
+    sales_breakdown: () => isOwner() || anyCan(['reports', 'finance']),
+    reorder_plan: () => anyCan(['inventory', 'purchases', 'suppliers']),
+    open_quotes: () => can('quotes'),
+    customer_segments: () => isOwner() || anyCan(['customers', 'whatsapp', 'reports']),
+    team_performance: () => online() && (isOwner() || can('team')),
+    my_performance: () => online() && !isOwner(),
+    supplier_updates: () => online() && anyCan(['suppliers', 'pricing']),
+    stock_status: () => anyCan(['inventory', 'purchases', 'pos'])
+  };
+  const EXTRA_TOOLS = [
+    { name: 'customer_segments', description: 'Customer analysis: best customers by spend, customers who stopped buying (no purchase in 90+ days), new customers this month, customers by governorate and vehicle, WhatsApp opt-in counts. Use for marketing and loyalty advice.', input_schema: { type: 'object', properties: {} } },
+    { name: 'team_performance', description: 'Each employee\'s work over the last N days: shop sales, online orders, sales value, discounts given, order updates, quotes, supplier orders, approval requests, open tasks, last seen.', input_schema: { type: 'object', properties: { days: { type: 'integer' } } } },
+    { name: 'my_performance', description: 'The current employee\'s own numbers over the last N days and their open tasks and orders given to them.', input_schema: { type: 'object', properties: { days: { type: 'integer' } } } },
+    { name: 'supplier_updates', description: 'Recent changes at the suppliers (price up/down, out of stock, back in stock, new and removed products), with the products the shop sells marked.', input_schema: { type: 'object', properties: { days: { type: 'integer' } } } },
+    { name: 'stock_status', description: 'Products out of stock, running low (at or below reorder level), and products whose supplier has run out.', input_schema: { type: 'object', properties: {} } }
+  ];
+  const ACTIONS = [];
+  // action(name, test, description, schema, summary(input) → text, run(input) → result)
+  const action = (name, ok, description, input_schema, summary, run) => ACTIONS.push({ name, ok, description, input_schema, summary, run });
+  const findProduct = (q) => { const w = norm(q).split(/\s+/).filter(Boolean); const list = D().products.filter(p => { const h = norm([p.name, p.partNumber, p.sku, p.brand].join(' ')); return w.every(x => h.includes(x)); }); return list.find(p => norm(p.name) === norm(q) || norm(p.partNumber) === norm(q)) || list[0]; };
+  const findSupplier = (q) => D().suppliers.find(s => norm(s.name).includes(norm(q)) || norm(q).includes(norm(s.name)));
+  const users = async () => (online() ? (await Auth.api('GET', '/api/users/brief')).users : []);
+  const findUser = async (q) => { if (!q) return null; const l = await users(); return l.find(u => norm(u.name) === norm(q)) || l.find(u => norm(u.name).includes(norm(q))); };
+  const catIds = () => D().categories.map(c => c.id);
+  action('create_product', () => can('inventory', 'request'), 'Add a new product to the shop catalog (it shows on the website after publishing).',
+    { type: 'object', properties: { name: { type: 'string' }, price: { type: 'number', description: 'selling price in OMR before VAT' }, cost: { type: 'number' }, category: { type: 'string', description: 'category id or name, e.g. suspension, lighting, recovery' }, brand: { type: 'string' }, part_number: { type: 'string' }, stock: { type: 'integer' }, show_price: { type: 'boolean' } }, required: ['name', 'price'] },
+    (i) => `Add product “${i.name}” · ${D().settings.currency || 'OMR'} ${r3(i.price)}${i.stock ? ` · stock ${i.stock}` : ''}${i.brand ? ` · ${i.brand}` : ''}`,
+    (i) => {
+      const cat = catIds().includes(i.category) ? i.category : (D().categories.find(c => norm(c.en).includes(norm(i.category))) || D().categories[0] || {}).id;
+      const p = { id: DB.uid('p'), name: i.name, nameAr: '', partNumber: i.part_number || '', sku: i.part_number || 'SKU-' + Date.now().toString(36).toUpperCase(), slug: norm(i.name).replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60) + '-' + Date.now().toString(36).slice(-4), brand: i.brand || '', category: cat, cost: seesCosts() ? r3(i.cost || 0) : 0, price: r3(i.price), stock: 0, reorder: 2, location: '', fitment: 'Universal fit', vehicles: [], active: true, online: true, showPrice: i.show_price !== false, image: '', oldPrice: 0, description: '', descriptionAr: '', featured: false, created: Date.now() };
+      D().products.push(p); if ((i.stock | 0) > 0) DB.adjustStock(p.id, i.stock | 0, 'adjust', 'AI', 'Opening stock'); DB.save(); return { ok: true, product: p.name, id: p.id };
+    });
+  action('adjust_stock', () => can('inventory', 'request'), 'Change the stock count of a product: positive to add stock that arrived (refill), negative to remove (damaged, correction).',
+    { type: 'object', properties: { product: { type: 'string', description: 'product name or part number' }, change: { type: 'integer' }, reason: { type: 'string' } }, required: ['product', 'change'] },
+    (i) => { const p = findProduct(i.product); return p ? `${i.change > 0 ? 'Add' : 'Remove'} ${Math.abs(i.change)} × ${p.name} (now ${p.stock} → ${Math.max(0, p.stock + i.change)})${i.reason ? ' · ' + i.reason : ''}` : `Product “${i.product}” not found`; },
+    (i) => { const p = findProduct(i.product); if (!p) return { error: 'Product not found' }; DB.adjustStock(p.id, i.change | 0, 'adjust', 'AI', i.reason || 'Stock change'); DB.save(); return { ok: true, product: p.name, stock: DB.product(p.id).stock }; });
+  action('create_purchase_order', () => can('purchases', 'request'), 'Order products from a supplier (creates a supplier order that can be sent by WhatsApp/email from the Suppliers page).',
+    { type: 'object', properties: { supplier: { type: 'string' }, items: { type: 'array', items: { type: 'object', properties: { product: { type: 'string' }, qty: { type: 'integer' } }, required: ['product', 'qty'] } } }, required: ['supplier', 'items'] },
+    (i) => { const s = findSupplier(i.supplier); return `Supplier order to ${s ? s.name : '“' + i.supplier + '” (not found)'}: ${(i.items || []).map(x => { const p = findProduct(x.product); return `${x.qty} × ${p ? p.name : x.product + ' (not found)'}`; }).join(', ')}`; },
+    (i) => {
+      const s = findSupplier(i.supplier); if (!s) return { error: 'Supplier not found' };
+      const items = (i.items || []).map(x => { const p = findProduct(x.product); return p && { pid: p.id, qty: Math.max(1, x.qty | 0), cost: r3(p.cost || 0), forSales: [] }; }).filter(Boolean);
+      if (!items.length) return { error: 'No products found' };
+      const po = { id: DB.uid('po'), no: DB.nextNo('PO-', 300), date: Date.now(), supplierId: s.id, status: 'ordered', items, total: r3(items.reduce((a, x) => a + x.qty * x.cost, 0)), note: 'Created with the AI assistant' };
+      D().purchases.push(po); DB.save(); return { ok: true, po: po.no, supplier: s.name };
+    });
+  action('add_expense', () => can('finance', 'request'), 'Record a business expense (rent, salaries, utilities, marketing, shipping, maintenance, software, other).',
+    { type: 'object', properties: { description: { type: 'string' }, amount: { type: 'number' }, category: { type: 'string', enum: ['rent', 'salaries', 'utilities', 'marketing', 'shipping', 'maintenance', 'software', 'other'] }, date: { type: 'string', description: 'YYYY-MM-DD, default today' }, method: { type: 'string', enum: ['cash', 'card', 'transfer'] } }, required: ['description', 'amount', 'category'] },
+    (i) => `Expense: ${i.description} · ${D().settings.currency || 'OMR'} ${r3(i.amount)} · ${i.category}${i.date ? ' · ' + i.date : ''}`,
+    (i) => { const d = i.date ? new Date(i.date).getTime() : Date.now(); D().expenses.push({ id: DB.uid('e'), date: Math.min(Number.isFinite(d) ? d : Date.now(), Date.now()), category: i.category, desc: i.description, amount: r3(i.amount), method: i.method || 'cash' }); DB.save(); return { ok: true }; });
+  action('create_task', () => online(), 'Create a task with an optional due time. For someone else only if the user may give tasks (owner / manager).',
+    { type: 'object', properties: { title: { type: 'string' }, assignee: { type: 'string', description: 'employee name; empty = the user' }, due: { type: 'string', description: 'ISO date-time, e.g. 2026-11-22T10:00' }, notes: { type: 'string' } }, required: ['title'] },
+    (i) => `Task “${i.title}”${i.assignee ? ' for ' + i.assignee : ''}${i.due ? ' · due ' + i.due.replace('T', ' ') : ''}`,
+    async (i) => {
+      const me = Auth.me(); const u = i.assignee ? await findUser(i.assignee) : { id: me.id, name: me.name };
+      if (!u) return { error: 'Employee not found' };
+      if (u.id !== me.id && !(Auth.isOwner() || Auth.can('team', 'edit'))) return { error: 'Only the owner or a manager can give tasks to others' };
+      const due = i.due ? new Date(i.due).getTime() : null;
+      D().tasks.push({ id: DB.uid('tk'), title: i.title, notes: i.notes || '', assignedTo: u.id, assignedName: u.name, due: Number.isFinite(due) ? due : null, done: false, createdBy: me.id, createdByName: me.name, created: Date.now() });
+      DB.save(); return { ok: true, for: u.name };
+    });
+  action('assign_order', () => online() && can('orders', 'edit'), 'Give an order to an employee (they are notified).',
+    { type: 'object', properties: { order_no: { type: 'string' }, employee: { type: 'string' } }, required: ['order_no', 'employee'] },
+    (i) => `Give order ${i.order_no} to ${i.employee}`,
+    async (i) => { const s = D().sales.find(x => norm(x.no) === norm(i.order_no)); if (!s) return { error: 'Order not found' }; const u = await findUser(i.employee); if (!u) return { error: 'Employee not found' }; s.assignedTo = u.id; s.assignedName = u.name; DB.save(); return { ok: true, order: s.no, to: u.name }; });
+  action('prepare_campaign', () => can('whatsapp', 'edit'), 'Prepare a WhatsApp marketing campaign (opens the campaign window filled in, so the user checks the customers and message before sending). Only customers who agreed to receive offers are included.',
+    { type: 'object', properties: { name: { type: 'string' }, audience: { type: 'string', enum: ['all', 'vehicle', 'governorate', 'category', 'workshop', 'inactive'] }, filter: { type: 'string', description: 'vehicle model, governorate or category name when needed' }, message: { type: 'string', description: 'message text; {name} = customer first name, {shop} = shop name' }, products: { type: 'array', items: { type: 'string' } } }, required: ['name', 'audience', 'message'] },
+    (i) => `Open the campaign “${i.name}” for ${i.audience}${i.filter ? ' (' + i.filter + ')' : ''} to review and send`,
+    (i) => { if (!global.BH || !BH.campaignModal) return { error: 'Campaigns are not available here' }; location.hash = '#/whatsapp'; setTimeout(() => BH.campaignModal(i), 300); return { ok: true, note: 'The campaign window is open for the user to check the customers and press send.' }; });
+  action('create_employee', () => online() && Auth.isOwner(), 'Create an employee account with a ready-made role (cashier, sales, storekeeper, manager). A password is generated and shown to the owner only.',
+    { type: 'object', properties: { name: { type: 'string' }, username: { type: 'string', description: 'lowercase letters/numbers, used to sign in' }, role: { type: 'string', enum: ['cashier', 'sales', 'storekeeper', 'manager'] }, phone: { type: 'string' } }, required: ['name', 'username', 'role'] },
+    (i) => `Create the account “${i.username}” for ${i.name} with the ${i.role} role`,
+    async (i) => {
+      const st = await Auth.api('GET', '/api/status');
+      const a = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789'; const pw = Array.from(crypto.getRandomValues(new Uint32Array(12)), x => a[x % a.length]).join('').replace(/^(.{4})(.{4})/, '$1-$2-');
+      await Auth.api('POST', '/api/users', { name: i.name, username: i.username, password: pw, phone: i.phone || '', perms: st.presets[i.role] || {} });
+      if (global.BH && BH.modal) BH.modal({ title: 'Give these to the employee', body: `<dl class="kv"><dt>Address</dt><dd dir="ltr">${location.origin + location.pathname}</dd><dt>User name</dt><dd dir="ltr"><b>${BH.esc(i.username.toLowerCase())}</b></dd><dt>Password</dt><dd dir="ltr"><b>${BH.esc(pw)}</b></dd></dl>`, footer: '<button class="btn primary" data-close>OK</button>' });
+      return { ok: true, username: i.username.toLowerCase(), note: 'The password was shown to the owner on screen (not included here).' };
+    });
+  action('make_pdf_report', () => true, 'Make a PDF report the user can download and share. Write the full report content in markdown (headings, bullet points, tables) from the data you looked up.',
+    { type: 'object', properties: { title: { type: 'string' }, markdown: { type: 'string' } }, required: ['title', 'markdown'] },
+    (i) => `Make the PDF “${i.title}”`,
+    async (i) => { if (!global.AIPDF) return { error: 'PDF is not available' }; await global.AIPDF.fromMarkdown(i.title, i.markdown); return { ok: true, note: 'The PDF was downloaded.' }; });
+
+  function toolsFor(withActions) {
+    const read = TOOLS.concat(EXTRA_TOOLS).filter(x => (READ_PERM[x.name] || (() => true))());
+    const acts = withActions ? ACTIONS.filter(a => a.ok()).map(a => ({ name: a.name, description: a.description + ' (The user confirms before it happens.)', input_schema: a.input_schema })) : [];
+    return read.concat(acts);
+  }
+
+  async function runTool(name, input) {
     input = input || {};
     const now = Date.now();
+    if (READ_PERM[name] && !READ_PERM[name]()) return { error: 'Not allowed for this user' };
+    if (name === 'customer_segments') {
+      const cs = D().customers, rv = rev();
+      const spend = new Map(); const last = new Map();
+      rv.forEach(s => { if (!s.customerId) return; spend.set(s.customerId, (spend.get(s.customerId) || 0) + s.total); last.set(s.customerId, Math.max(last.get(s.customerId) || 0, s.date)); });
+      const top = cs.filter(c => spend.has(c.id)).sort((a, b) => spend.get(b.id) - spend.get(a.id)).slice(0, 10).map(c => ({ name: c.name, spent: r3(spend.get(c.id)), last_order: new Date(last.get(c.id)).toISOString().slice(0, 10), vehicle: c.vehicle, city: c.city }));
+      const lapsed = cs.filter(c => last.has(c.id) && now - last.get(c.id) > 90 * DAY).sort((a, b) => spend.get(b.id) - spend.get(a.id)).slice(0, 15).map(c => ({ name: c.name, spent: r3(spend.get(c.id)), last_order: new Date(last.get(c.id)).toISOString().slice(0, 10) }));
+      const m0 = new Date(); m0.setDate(1); m0.setHours(0, 0, 0, 0);
+      const count = (f) => { const o = {}; cs.forEach(c => { const k = f(c) || 'unknown'; o[k] = (o[k] || 0) + 1; }); return Object.entries(o).sort((a, b) => b[1] - a[1]).slice(0, 12); };
+      return { customers: cs.length, opted_in_whatsapp: cs.filter(c => c.optIn !== false && c.phone).length, new_this_month: cs.filter(c => (c.created || 0) >= m0.getTime()).length, never_bought: cs.filter(c => !spend.has(c.id)).length, top_customers: top, stopped_buying_90d: lapsed, by_city: count(c => c.city), by_vehicle: count(c => c.vehicle) };
+    }
+    if (name === 'team_performance') { const r = await Auth.api('GET', '/api/team/stats?days=' + (input.days || 30)); return r.users.map(u => Object.assign({}, u, { daily: undefined, open_tasks: D().tasks.filter(t => t.assignedTo === u.id && !t.done).length })); }
+    if (name === 'my_performance') { const r = await Auth.api('GET', '/api/me/stats?days=' + (input.days || 30)); const me = Auth.me(); return Object.assign({}, r.me, { daily: undefined, open_tasks: D().tasks.filter(t => t.assignedTo === me.id && !t.done).map(t => ({ title: t.title, due: t.due ? new Date(t.due).toISOString() : null })), orders_given_to_me: D().sales.filter(s => s.assignedTo === me.id && !['completed', 'delivered', 'cancelled', 'refunded'].includes(s.status)).map(s => ({ no: s.no, customer: s.customerName, status: s.status })) }); }
+    if (name === 'supplier_updates') {
+      const r = await Auth.api('GET', '/api/supplier-changes?days=' + (input.days || 7));
+      const mine = new Map(); D().products.forEach(p => (p.sources || []).forEach(x => mine.set(x.supplierId + '|' + x.sku, p)));
+      const sname = (id) => (DB.supplier(id) || {}).name || id;
+      const items = r.items.map(c => ({ kind: c.kind, supplier: sname(c.supplierId), product: c.title, old_price: c.oldPrice, price: c.price, currency: c.currency, date: new Date(c.at).toISOString().slice(0, 10), i_sell_it: mine.has(c.supplierId + '|' + c.sku) ? mine.get(c.supplierId + '|' + c.sku).name : undefined }));
+      const by = {}; items.forEach(x => { by[x.kind] = (by[x.kind] || 0) + 1; });
+      return { totals: by, affecting_my_products: items.filter(x => x.i_sell_it), other_examples: items.filter(x => !x.i_sell_it).slice(0, 25) };
+    }
+    if (name === 'stock_status') {
+      const act = D().products.filter(p => p.active !== false);
+      return { out_of_stock: act.filter(p => p.stock <= 0).slice(0, 40).map(p => p.name), running_low: act.filter(p => p.stock > 0 && (p.reorder || 0) > 0 && p.stock <= p.reorder).map(p => ({ name: p.name, stock: p.stock, reorder_level: p.reorder })), supplier_out_of_stock: act.filter(p => p.supplierOut).map(p => ({ name: p.name, shop_stock: p.stock })) };
+    }
     if (name === 'search_products') {
       const q = norm(input.query).split(/\s+/).filter(Boolean);
       const s30 = productAgg(within(rev(), now - 30 * DAY, now)), s90 = productAgg(within(rev(), now - 90 * DAY, now));
       return D().products.filter(p => { const h = norm([p.name, p.brand, p.partNumber, p.sku, p.category, p.fitment, (p.vehicles || []).join(' ')].join(' ')); return q.every(w => h.includes(w)); }).slice(0, 15)
-        .map(p => ({ name: p.name, part_no: p.partNumber || p.sku, brand: p.brand, category: p.category, price: p.price, cost: p.cost, margin_pct: p.price ? +((p.price - p.cost) / p.price * 100).toFixed(1) : null, stock: p.stock, reorder_level: p.reorder, shown_price_online: !!p.showPrice, sold_30d: (s30.find(a => a.pid === p.id) || {}).qty || 0, sold_90d: (s90.find(a => a.pid === p.id) || {}).qty || 0, fits: p.fitment }));
+        .map(p => ({ name: p.name, part_no: p.partNumber || p.sku, brand: p.brand, category: p.category, price: p.price, cost: seesCosts() ? p.cost : undefined, margin_pct: p.price && seesCosts() ? +((p.price - p.cost) / p.price * 100).toFixed(1) : undefined, supplier_out_of_stock: p.supplierOut || undefined, stock: p.stock, reorder_level: p.reorder, shown_price_online: !!p.showPrice, sold_30d: (s30.find(a => a.pid === p.id) || {}).qty || 0, sold_90d: (s90.find(a => a.pid === p.id) || {}).qty || 0, fits: p.fitment }));
     }
     if (name === 'customer_history') {
       const q = norm(input.query), qd = q.replace(/\D/g, '');
@@ -235,7 +370,7 @@ Reply in ${lang === 'ar' ? 'Arabic' : 'the same language the owner writes in (Ar
       });
       return { days, by: input.by, rows: Object.entries(o).map(([k, a]) => ({ key: k, net_sales: r3(a.net_sales), gross_profit: r3(a.gross_profit), margin_pct: a.net_sales ? +(a.gross_profit / a.net_sales * 100).toFixed(1) : 0, units: a.units, orders: a.orders.size })).sort((a, b) => b.net_sales - a.net_sales).slice(0, 30) };
     }
-    if (name === 'reorder_plan') return reorderPlan().slice(0, 30);
+    if (name === 'reorder_plan') return reorderPlan().slice(0, 30).map(r => (seesCosts() ? r : Object.assign({}, r, { cost: undefined })));
     if (name === 'open_quotes') return D().quotes.filter(q => ['new', 'sent', 'accepted'].includes(q.status)).map(q => ({ no: q.no, status: q.status, age_days: Math.floor((now - q.date) / DAY), customer: (DB.customer(q.customerId) || {}).name, vehicle: q.vehicle, qpay: q.qpay, value: r3(q.items.reduce((a, i) => a + i.qty * (i.price || 0), 0)), items: q.items.map(i => i.qty + '× ' + i.name).join('; ') }));
     return { error: 'Unknown tool ' + name };
   }
@@ -250,9 +385,19 @@ Reply in ${lang === 'ar' ? 'Arabic' : 'the same language the owner writes in (Ar
 
   // messages: [{role:'user'|'assistant', content:string}] ; returns final text.
   // The model may call the tools above; they run here in the browser and the loop continues.
-  async function ask({ messages, lang, days, onText, onTool, signal, tools }) {
+  function staffSnapshot() {
+    const me = Auth.me(); const d0 = new Date(); d0.setHours(0, 0, 0, 0);
+    const mineToday = D().sales.filter(s => s.createdBy === me.id && s.date >= d0.getTime() && DB.countsAsRevenue(s));
+    return { today: new Date().toISOString().slice(0, 10), employee: me.name, allowed_sections: Object.keys(me.perms || {}).filter(k => ['none', true, false].indexOf(me.perms[k]) < 0 && typeof me.perms[k] === 'string'),
+      my_sales_today: { count: mineToday.length, value: r3(mineToday.reduce((a, s) => a + s.total, 0)) },
+      my_open_tasks: D().tasks.filter(t => t.assignedTo === me.id && !t.done).map(t => ({ title: t.title, due: t.due ? new Date(t.due).toISOString() : null })),
+      orders_given_to_me: D().sales.filter(s => s.assignedTo === me.id && !['completed', 'delivered', 'cancelled', 'refunded'].includes(s.status)).map(s => ({ no: s.no, customer: s.customerName, status: s.status })),
+      new_orders_waiting: can('orders') ? D().sales.filter(s => s.channel !== 'shop' && s.status === 'new' && !s.assignedTo).length : undefined };
+  }
+  // confirm(tool, input, summary) → Promise<boolean>: actions only happen after the user agrees
+  async function ask({ messages, lang, days, onText, onTool, signal, tools, confirm }) {
     const cl = await client();
-    const snap = snapshot(days || 30);
+    const snap = staff() ? staffSnapshot() : snapshot(days || 30);
     // keep requests small on phones: the last 10 messages, starting with a question
     let convo = messages.slice(-10);
     while (convo.length && convo[0].role !== 'user') convo = convo.slice(1);
@@ -267,7 +412,7 @@ Reply in ${lang === 'ar' ? 'Arabic' : 'the same language the owner writes in (Ar
         fallbacks: 'default',
         output_config: { effort: 'medium' },
         system: systemPrompt(lang),
-        tools: tools === false ? undefined : TOOLS,
+        tools: tools === false ? undefined : toolsFor(!!confirm),
         messages: convo
       }, { signal, timeout: 180000, maxRetries: 2 });
       if (onText) stream.on('text', (_d, snapshotText) => onText(before + snapshotText));
@@ -277,11 +422,20 @@ Reply in ${lang === 'ar' ? 'Arabic' : 'the same language the owner writes in (Ar
       if (final.stop_reason !== 'tool_use') return before + text;
       before += text ? text + '\n\n' : '';
       convo.push({ role: 'assistant', content: final.content });
-      const results = final.content.filter(b => b.type === 'tool_use').map(b => {
+      const results = [];
+      for (const b of final.content.filter(x => x.type === 'tool_use')) {
         if (onTool) onTool(b.name, b.input);
-        let out; try { out = runTool(b.name, b.input); } catch (e) { out = { error: String(e.message || e) }; }
-        return { type: 'tool_result', tool_use_id: b.id, content: JSON.stringify(out) };
-      });
+        let out;
+        try {
+          const act = ACTIONS.find(a => a.name === b.name);
+          if (act) {
+            if (!confirm || !act.ok()) out = { error: 'This action is not allowed for this user.' };
+            else if (await confirm(b.name, b.input, act.summary(b.input || {}))) out = await act.run(b.input || {});
+            else out = { cancelled: true, note: 'The user did not confirm this action.' };
+          } else out = await runTool(b.name, b.input);
+        } catch (e) { out = { error: String(e.message || e) }; }
+        results.push({ type: 'tool_result', tool_use_id: b.id, content: JSON.stringify(out) });
+      }
       convo.push({ role: 'user', content: results });
     }
     return before + (lang === 'ar' ? '\n\n(توقف بعد عدة عمليات بحث. اسأل سؤالاً أدق.)' : '\n\n(Stopped after several lookups. Try a more specific question.)');
@@ -344,11 +498,13 @@ Reply in ${lang === 'ar' ? 'Arabic' : 'the same language the owner writes in (Ar
   function explainError(e, lang) {
     const ar = lang === 'ar';
     const msg = String((e && e.message) || e);
-    if (msg === 'NO_KEY') return ar ? 'أضف مفتاح Claude API من الإعدادات لتفعيل المستشار الذكي.' : 'Add your Claude API key in Settings to enable the AI advisor.';
+    if (msg === 'NO_KEY') return online() && !Auth.isOwner() ? (ar ? 'لم يربط المالك مزود الذكاء الاصطناعي بعد.' : 'The owner has not connected an AI provider yet.') : (ar ? 'اربط مزود الذكاء الاصطناعي (Claude أو Gemini المجاني) من الإعدادات ← AI.' : 'Connect an AI provider (Claude, or the free Gemini) in Settings → AI.');
     if (msg === 'REFUSAL') return ar ? 'تعذر على النموذج الإجابة على هذا الطلب. جرّب صياغة أخرى.' : 'The model declined this request. Try rephrasing it.';
     if (e && e.status === 401) return ar ? 'مفتاح API غير صالح. تحقق منه في الإعدادات.' : 'The API key was rejected (401). Check it in Settings.';
     if (e && e.status === 429) return ar ? 'تم تجاوز حد الاستخدام مؤقتًا. حاول بعد قليل.' : 'Rate limit reached. Please try again in a minute.';
-    if (e && e.status >= 500) return ar ? 'خدمة Claude غير متاحة مؤقتًا. حاول لاحقًا.' : 'Claude is temporarily unavailable. Please retry shortly.';
+    if (e && e.status === 412) return online() && !Auth.isOwner() ? (ar ? 'لم يربط المالك مزود الذكاء الاصطناعي بعد.' : 'The owner has not connected an AI provider yet.') : (ar ? 'اربط مزود الذكاء الاصطناعي من الإعدادات ← AI.' : 'Connect an AI provider in Settings → AI.');
+    if (e && e.status === 403) return ar ? 'ليست لديك صلاحية استخدام الذكاء الاصطناعي.' : 'You don\'t have permission to use the AI.';
+    if (e && e.status >= 500) return ar ? 'خدمة الذكاء الاصطناعي غير متاحة مؤقتًا. حاول لاحقًا.' : 'The AI service is temporarily unavailable. Please retry shortly.';
     if (e && e.name === 'APIUserAbortError') return ar ? 'تم الإيقاف.' : 'Stopped.';
     if (e && (e.name === 'APIConnectionTimeoutError' || /timed? ?out/i.test(msg))) return ar ? 'استغرق الرد وقتاً طويلاً. حاول مرة أخرى.' : 'The answer took too long. Please try again.';
     if (/import|fetch|network|Failed|Load failed/i.test(msg)) return ar ? 'تعذر الاتصال. تحقق من الإنترنت.' : 'Could not reach the AI service. Check your internet connection.';
@@ -405,5 +561,5 @@ ${s.slow_movers_no_sales_60d.length ? `<h3>${L('Slow movers (no sales in 60 days
 </div></body></html>`;
   }
 
-  global.AI = { getKey, setKey, snapshot, insights, ask, askJSON, quoteFromText, productCopy, campaignCopy, reorderPlan, runTool, TOOLS, md, explainError, reportHTML, MODEL };
+  global.AI = { getKey, setKey, snapshot, insights, ask, askJSON, quoteFromText, productCopy, campaignCopy, reorderPlan, runTool, TOOLS, ACTIONS, toolsFor, md, explainError, reportHTML, MODEL };
 })(window);

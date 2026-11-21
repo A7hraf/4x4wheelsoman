@@ -45,7 +45,9 @@
     const waLink = (ph, text) => `https://api.whatsapp.com/send?phone=${phoneDigits(ph)}&text=${encodeURIComponent(text)}`;
     const fill = (tpl, vars) => String(tpl || '').replace(/\{(\w+)\}/g, (m, k) => (vars[k] != null ? vars[k] : m));
     const siteUrl = () => S().siteUrl || (location.origin + location.pathname.replace(/[^/]*$/, ''));
-    const openWA = (ph, text, log) => { if (!phoneDigits(ph)) { toast(t('no_phone')); return false; } window.open(waLink(ph, text), '_blank', 'noopener'); if (log) DB.logWA(Object.assign({ to: ph, text: text.slice(0, 400) }, log)); return true; };
+    const openWADirect = (ph, text, log) => { if (!phoneDigits(ph)) { toast(t('no_phone')); return false; } window.open(waLink(ph, text), '_blank', 'noopener'); if (log) DB.logWA(Object.assign({ to: ph, text: text.slice(0, 400) }, log)); return true; };
+    // with WhatsApp Business connected (admin-wa.js), messages are sent from the shop's number instead
+    const openWA = (ph, text, log) => (H.sendWA ? H.sendWA(ph, text, log, openWADirect) : openWADirect(ph, text, log));
     const qpayTone = (st) => ({ pending: 'processing', requested: 'new', approved: 'shipped', settled: 'delivered', declined: 'cancelled' }[st] || 'new');
 
     // ---------- bill links (self-contained invoice page) ----------
@@ -151,7 +153,7 @@
       $('#gh_dl', v).onclick = () => download('catalog.js', catalogJS(buildCatalog()), 'text/javascript');
       if ($('#gh_rm', v)) $('#gh_rm', v).onclick = () => { setToken(''); H.render(); };
     }
-    Object.assign(H, { WA: WA_SVG, waLink, fill, sendBill, notifyModal, billLink, qpayTone, publishCard, bindPublish, openWA, writePreview });
+    Object.assign(H, { WA: WA_SVG, waLink, fill, sendBill, notifyModal, billLink, qpayTone, publishCard, bindPublish, openWA, openWADirect, writePreview, vars, campaignModal, waAudience: audience });
 
     // ======================================================
     // QUOTES
@@ -386,7 +388,9 @@
       if (kind === 'inactive') return cs.filter(c => Date.now() - lastBuy(c) > 60 * DB.DAY);
       return cs;
     }
-    function campaignModal() {
+    // prefill (from the AI assistant): { name, audience: all|vehicle|governorate|category|workshop|inactive, filter, message, products: [names] }
+    function campaignModal(prefill) {
+      if (!prefill || prefill instanceof Event) prefill = null;
       const vehicles = D().vehicles || [];
       const prods = D().products.filter(p => p.active !== false).sort((a, b) => a.name.localeCompare(b.name));
       const lang = I18N.lang;
@@ -430,7 +434,17 @@
             } catch (e) { toast('⚠️ ' + AI.explainError(e, I18N.lang)); }
             btn.disabled = false; btn.innerHTML = `${icon('sparkle')}${H.t('ai_write')}`;
           };
-          fillAv(); upd();
+          if (prefill) {
+            if (prefill.name) $('#cp_n', el).value = prefill.name;
+            const a = { governorate: 'gov', category: 'cat' }[prefill.audience] || prefill.audience;
+            if (a && $(`#cp_a option[value="${a}"]`, el)) $('#cp_a', el).value = a;
+            fillAv();
+            if (prefill.filter) { const f = String(prefill.filter).toLowerCase(); const o = [...av.options].find(x => x.textContent.toLowerCase().includes(f) || x.value.toLowerCase() === f); if (o) av.value = o.value; }
+            if (prefill.message) $('#cp_m', el).value = prefill.message;
+            (prefill.products || []).forEach(n => { const o = [...$('#cp_p', el).options].find(x => x.textContent.toLowerCase().includes(String(n).toLowerCase())); if (o) o.selected = true; });
+          }
+          fillAv(); if (prefill && prefill.filter) { const f = String(prefill.filter).toLowerCase(); const o = [...av.options].find(x => x.textContent.toLowerCase().includes(f) || x.value.toLowerCase() === f); if (o) av.value = o.value; }
+          upd();
           $('#cp_go', el).onclick = () => {
             const k = $('#cp_a', el).value, rec = audience(k, av.value);
             if (!rec.length) return;
