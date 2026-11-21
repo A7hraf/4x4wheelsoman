@@ -16,7 +16,7 @@
   const API = String(global.X4W_API || '').replace(/\/+$/, '');
   if (!API) return;
   const SESS = 'x4w_rsess', LOCK_AT = 'x4w_lock_at';
-  const COLS = ['products', 'categories', 'vehicles', 'customers', 'suppliers', 'sales', 'expenses', 'purchases', 'moves', 'quotes', 'campaigns', 'waLog', 'held'];
+  const COLS = ['products', 'categories', 'vehicles', 'customers', 'suppliers', 'sales', 'expenses', 'purchases', 'moves', 'quotes', 'campaigns', 'waLog', 'held', 'tasks'];
   const APPEND_ONLY = ['moves', 'waLog'];   // old log lines dropped on this device are not deleted on the server
   const LOCAL_SETTINGS = ['theme', 'lang']; // per person / per device
   const POLL_MS = 8000;
@@ -29,7 +29,7 @@
   const T = (en, ar) => (lang() === 'ar' ? ar : en);
   const clone = (x) => (x == null ? x : JSON.parse(JSON.stringify(x)));
 
-  let token = null, me = null, seq = '0', started = false, onReady = [], inbox = { pending: 0, decidedAt: 0, ai: false };
+  let token = null, me = null, seq = '0', started = false, onReady = [], inbox = { pending: 0, decidedAt: 0, ai: false, notes: 0, notesAt: 0, supplierChanges: 0, waUnread: 0 };
   let sess = null, hiddenAt = 0, lastActive = Date.now();
 
   // ---------- server calls ----------
@@ -153,13 +153,19 @@
   let lastDecided = 0;
   function updateMe(r) {
     if (r.me) { const permsChanged = me && JSON.stringify(me.perms) !== JSON.stringify(r.me.perms); me = r.me; if (permsChanged) { note(T('Your permissions were changed by the owner. Reloading…', 'غيّر المالك صلاحياتك. جارٍ إعادة التحميل…'), 'info'); setTimeout(() => location.reload(), 1500); } }
-    const before = inbox.pending;
+    const before = inbox.pending, badgesBefore = [inbox.notes, inbox.supplierChanges, inbox.waUnread].join();
+    const notesAtBefore = inbox.notesAt;
     if (r.pending != null) inbox.pending = r.pending;
     if (r.ai != null) inbox.ai = r.ai;
+    ['notes', 'notesAt', 'supplierChanges', 'waUnread'].forEach(k => { if (r[k] != null) inbox[k] = r[k]; });
+    // new notifications for this person → shown by the bell (admin-work.js)
+    if (started && inbox.notesAt > notesAtBefore) try { global.dispatchEvent(new CustomEvent('x4w:notes', { detail: { at: inbox.notesAt, n: inbox.notes } })); } catch (e) { }
+    const badgesChanged = badgesBefore !== [inbox.notes, inbox.supplierChanges, inbox.waUnread].join();
     if (r.decidedAt && lastDecided && r.decidedAt > lastDecided && me.role !== 'owner') note(T('The owner answered one of your requests — see Approvals.', 'ردّ المالك على أحد طلباتك — راجع الموافقات.'), 'info');
     if (r.decidedAt) lastDecided = r.decidedAt;
     if (me && me.role === 'owner' && inbox.pending > before && started) note(T('New request waiting for your approval.', 'طلب جديد بانتظار موافقتك.'), 'info');
-    if (inbox.pending !== before && global.BH && global.BH.renderShell) try { global.BH.renderShell(); } catch (e) { }
+    if ((inbox.pending !== before || badgesChanged) && global.BH && global.BH.renderShell) try { global.BH.renderShell(); } catch (e) { }
+    try { global.dispatchEvent(new CustomEvent('x4w:inbox')); } catch (e) { }
   }
 
   // ---------- small UI helpers ----------

@@ -14,6 +14,9 @@
     erase_all: 'Erase all data on this device', erase_q: 'This deletes every order, customer, product change and key stored on this device. Download a backup first. Type ERASE to continue:',
     ai_write: 'Write with AI', ai_writing: 'Writing…', ai_done: 'Filled in — check it before saving', ai_reading: 'Reading the message…', ai_read: 'Read with AI', looking_up: 'Looking up',
     t_search_products: 'products', t_customer_history: 'customer history', t_find_orders: 'orders', t_sales_breakdown: 'sales breakdown', t_reorder_plan: 'reorder plan', t_open_quotes: 'open quotes',
+    t_customer_segments: 'customer analysis', t_team_performance: 'team performance', t_my_performance: 'my performance', t_supplier_updates: 'supplier updates', t_stock_status: 'stock status',
+    t_create_product: 'add product', t_adjust_stock: 'stock change', t_create_purchase_order: 'supplier order', t_add_expense: 'expense', t_create_task: 'task', t_assign_order: 'give order', t_prepare_campaign: 'campaign', t_create_employee: 'employee account', t_make_pdf_report: 'PDF report',
+    assistant: 'AI assistant', assistant_sub: 'Ask about products, customers, orders and your work. It only sees what you are allowed to see.', save_pdf: 'Save as PDF',
     show_more: 'Show more', sign_out: 'Sign out', more: 'More', home: 'Home', tab_sell: 'Sell', tab_orders: 'Orders', grp_sell: 'Sell', grp_stock: 'Stock', grp_grow: 'Marketing & AI', grp_set: 'Shop', account: 'Account', theme_t: 'Dark / light', lang_t: 'العربية', locks_after: 'Locks after {m} min idle', so_note: 'Signing out locks the dashboard. Your data stays encrypted on this device.',
     cc_title: 'AI command centre', cc_ask: 'Ask anything about your business…', cc_go: 'Ask', todo: "Today's to-do", todo_none: 'All clear — nothing waiting.', cc_ai_off: 'AI is off. Add your Claude API key to ask questions, read WhatsApp messages and write product text.', cc_turn_on: 'Turn on AI',
     td_new: 'new online orders to confirm', td_quotes: 'quote requests waiting for a price', td_sent: 'quotes sent, no answer for 2+ days', td_qpay: 'Qpay payments waiting', td_unpaid: 'unpaid orders', td_reorder: 'items will run out before new stock arrives', td_low: 'items out of stock',
@@ -27,6 +30,9 @@
     erase_all: 'حذف كل البيانات على هذا الجهاز', erase_q: 'سيتم حذف كل الطلبات والعملاء وتعديلات المنتجات والمفاتيح على هذا الجهاز. نزّل نسخة احتياطية أولاً. اكتب ERASE للمتابعة:',
     ai_write: 'اكتب بالذكاء الاصطناعي', ai_writing: 'جارٍ الكتابة…', ai_done: 'تمت التعبئة — راجعها قبل الحفظ', ai_reading: 'جارٍ قراءة الرسالة…', ai_read: 'اقرأ بالذكاء الاصطناعي', looking_up: 'جارٍ البحث في',
     t_search_products: 'المنتجات', t_customer_history: 'سجل العميل', t_find_orders: 'الطلبات', t_sales_breakdown: 'تفاصيل المبيعات', t_reorder_plan: 'خطة إعادة الطلب', t_open_quotes: 'عروض الأسعار المفتوحة',
+    t_customer_segments: 'تحليل العملاء', t_team_performance: 'أداء الفريق', t_my_performance: 'أدائي', t_supplier_updates: 'تحديثات الموردين', t_stock_status: 'حالة المخزون',
+    t_create_product: 'إضافة منتج', t_adjust_stock: 'تعديل المخزون', t_create_purchase_order: 'طلب من مورد', t_add_expense: 'مصروف', t_create_task: 'مهمة', t_assign_order: 'إسناد طلب', t_prepare_campaign: 'حملة', t_create_employee: 'حساب موظف', t_make_pdf_report: 'تقرير PDF',
+    assistant: 'المساعد الذكي', assistant_sub: 'اسأل عن المنتجات والعملاء والطلبات وعملك. يرى فقط ما يُسمح لك برؤيته.', save_pdf: 'حفظ PDF',
     show_more: 'عرض المزيد', sign_out: 'تسجيل الخروج', more: 'المزيد', home: 'الرئيسية', tab_sell: 'البيع', tab_orders: 'الطلبات', grp_sell: 'المبيعات', grp_stock: 'المخزون', grp_grow: 'التسويق والذكاء', grp_set: 'المتجر', account: 'الحساب', theme_t: 'داكن / فاتح', lang_t: 'English', locks_after: 'يُقفل بعد {m} دقيقة من عدم الاستخدام', so_note: 'تسجيل الخروج يقفل اللوحة. تبقى بياناتك مشفّرة على هذا الجهاز.',
     cc_title: 'مركز الذكاء الاصطناعي', cc_ask: 'اسأل أي شيء عن عملك…', cc_go: 'اسأل', todo: 'مهام اليوم', todo_none: 'لا يوجد شيء بانتظارك.', cc_ai_off: 'الذكاء الاصطناعي متوقف. أضف مفتاح Claude لتسأل عن عملك وتقرأ رسائل واتساب وتكتب وصف المنتجات.', cc_turn_on: 'تفعيل الذكاء الاصطناعي',
     td_new: 'طلبات إلكترونية جديدة بانتظار التأكيد', td_quotes: 'طلبات عروض أسعار بانتظار التسعير', td_sent: 'عروض أسعار أُرسلت دون رد منذ يومين+', td_qpay: 'دفعات Qpay بانتظار الإجراء', td_unpaid: 'طلبات غير مدفوعة', td_reorder: 'منتجات ستنفد قبل وصول مخزون جديد', td_low: 'منتجات نفدت من المخزون',
@@ -928,42 +934,51 @@
   // =====================================================
   const SUGGEST = {
     en: ['Analyze my business for the last 30 days and give me the 5 most important actions.', 'Which products should I reorder this week, and how many?', 'How can I grow online sales on Instagram and WhatsApp?', 'Which items should I put on offer to free up cash?', 'Where am I losing money? Review my expenses and margins.'],
-    ar: ['حلّل نشاطي التجاري لآخر 30 يومًا وأعطني أهم 5 إجراءات.', 'ما المنتجات التي يجب أن أعيد طلبها هذا الأسبوع وبأي كمية؟', 'كيف أزيد المبيعات الإلكترونية عبر إنستغرام وواتساب؟', 'ما الأصناف التي يجب أن أضعها في عرض لتحرير السيولة؟', 'أين أخسر المال؟ راجع مصروفاتي وهوامش الربح.']
+    ar: ['حلّل نشاطي التجاري لآخر 30 يومًا وأعطني أهم 5 إجراءات.', 'ما المنتجات التي يجب أن أعيد طلبها هذا الأسبوع وبأي كمية؟', 'كيف أزيد المبيعات الإلكترونية عبر إنستغرام وواتساب؟', 'ما الأصناف التي يجب أن أضعها في عرض لتحرير السيولة؟', 'أين أخسر المال؟ راجع مصروفاتي وهوامش الربح.'],
+    owner_more_en: ['Analyze my customers and employees and give me recommendations.', 'What changed at my suppliers this week that affects my prices?', 'Make a PDF report of this month\'s sales and stock.'],
+    owner_more_ar: ['حلّل عملائي وموظفيّ وأعطني توصيات.', 'ما الذي تغيّر لدى الموردين هذا الأسبوع ويؤثر على أسعاري؟', 'اعمل تقرير PDF لمبيعات ومخزون هذا الشهر.'],
+    staff_en: ['What should I do first today?', 'How am I doing this month?', 'Which products are out of stock or running low?', 'Find a product for a Land Cruiser 300 lift kit.'],
+    staff_ar: ['ماذا يجب أن أفعل أولاً اليوم؟', 'كيف أدائي هذا الشهر؟', 'ما المنتجات النافدة أو القليلة؟', 'ابحث عن منتج رفع لاندكروزر 300.']
   };
+  // shop-wide numbers (health score, insights, reports) are for the owner and people allowed to see reports and costs
+  const seesShop = () => !(window.Auth && Auth.mode === 'server') || Auth.isOwner() || (Auth.can('reports', 'view') && Auth.seesCosts());
   function viewAdvisor(v) {
-    const ins = AI.insights(I18N.lang);
+    const shop = seesShop();
+    const ins = shop ? AI.insights(I18N.lang) : null;
     const hasKey = !!AI.getKey();
-    const scoreColor = ins.score >= 70 ? 'var(--ok)' : ins.score >= 45 ? 'var(--warn)' : 'var(--bad)';
+    const scoreColor = !ins ? '' : ins.score >= 70 ? 'var(--ok)' : ins.score >= 45 ? 'var(--warn)' : 'var(--bad)';
     const lvlIcon = { good: ['check', 'tone-ok'], warn: ['alert', 'tone-warn'], bad: ['alert', 'tone-bad'], info: ['reports', 'tone-info'] };
+    const sug = shop ? (SUGGEST[I18N.lang] || SUGGEST.en).concat(SUGGEST['owner_more_' + I18N.lang] || SUGGEST.owner_more_en).slice(0, 7) : (SUGGEST['staff_' + I18N.lang] || SUGGEST.staff_en);
     v.innerHTML = `
-      <div class="page-head"><div><h2>${icon('sparkle')} ${t('advisor')}</h2><p>${t('overview_sub')}</p></div>
-        <div class="actions"><div class="seg" id="aseg">${[[30, t('last_30')], [90, t('last_90')]].map(([k, l]) => `<button data-k="${k}" class="${state.advDays === k ? 'on' : ''}">${l}</button>`).join('')}</div><button class="btn primary" id="genRep">${icon('reports')}${t('gen_report')}</button></div></div>
-      ${hasKey ? '' : `<div class="notice" style="margin-bottom:16px">${icon('sparkle')}<div>${t('no_key')} <a href="#/settings" style="text-decoration:underline;font-weight:700">${t('settings')} →</a></div></div>`}
-      <div class="grid adv">
-        <div>
+      <div class="page-head"><div><h2>${icon('sparkle')} ${shop ? t('advisor') : t('assistant')}</h2><p>${shop ? t('overview_sub') : t('assistant_sub')}</p></div>
+        ${shop ? `<div class="actions"><div class="seg" id="aseg">${[[30, t('last_30')], [90, t('last_90')]].map(([k, l]) => `<button data-k="${k}" class="${state.advDays === k ? 'on' : ''}">${l}</button>`).join('')}</div><button class="btn primary" id="genRep">${icon('reports')}${t('gen_report')}</button></div>` : ''}</div>
+      ${hasKey ? '' : `<div class="notice" style="margin-bottom:16px">${icon('sparkle')}<div>${(window.Auth && Auth.mode === 'server' && !Auth.isOwner()) ? AI.explainError(new Error('NO_KEY'), I18N.lang) : `${t('no_key')} <a href="#/settings" style="text-decoration:underline;font-weight:700">${t('settings')} →</a>`}</div></div>`}
+      <div class="grid ${shop ? 'adv' : 'adv solo'}">
+        ${shop ? `<div>
           <div class="card"><div class="card-b" style="display:flex;gap:18px;align-items:center">
             <div class="ring" style="--v:${ins.score};--c:${scoreColor}"><b>${ins.score}</b><span>/100</span></div>
             <div><h3 style="margin:0 0 4px">${t('health')}</h3><p class="muted" style="margin:0">${t('net_sales')} ${moneyTxt(ins.snap.totals.net_sales, 0)} · ${t('gross_profit')} ${moneyTxt(ins.snap.totals.gross_profit, 0)} · ${ins.snap.totals.orders} ${t('orders_n').toLowerCase()}</p></div></div></div>
           <div class="card mt"><div class="card-h"><h3>${t('insights')}</h3></div><div class="card-b">
             <ul class="mini-list">${ins.items.map(i => `<li style="align-items:flex-start"><span class="ic-wrap ${lvlIcon[i.level][1]}" style="width:32px;height:32px;border-radius:8px;display:grid;place-items:center;flex:none">${icon(lvlIcon[i.level][0])}</span><div class="grow"><div class="strong">${esc(i.title)}</div><div class="muted" style="font-size:13px">${esc(i.text)}</div>${i.action ? `<div style="font-size:13px;color:var(--brand);font-weight:600;margin-top:2px">→ ${esc(i.action)}</div>` : ''}</div>${hasKey ? `<button class="btn sm ghost" data-why="${esc(i.title)}" title="${t('ask_ai')}">${icon('sparkle')}</button>` : ''}</li>`).join('')}</ul></div></div>
-        </div>
+        </div>` : ''}
         <div class="card chat"><div class="card-h"><h3>${icon('sparkle')} ${t('ask_ai')}</h3>${state.chat.length ? `<button class="btn sm ghost" id="clrChat">${t('clear_chat')}</button>` : ''}</div>
           <div class="chat-log" id="chatLog"></div>
-          <div class="chips" id="chips">${(SUGGEST[I18N.lang] || SUGGEST.en).map(q => `<button>${esc(q)}</button>`).join('')}</div>
+          <div class="chips" id="chips">${sug.map(q => `<button>${esc(q)}</button>`).join('')}</div>
           <form class="chat-in" id="chatForm"><textarea class="input" id="chatQ" rows="2" placeholder="${t('ask_ph')}"></textarea><button class="btn primary" id="chatSend" type="submit" aria-label="send">${icon('send')}</button></form>
         </div>
       </div>`;
-    bindSeg('aseg', k => { state.advDays = +k; render(); });
+    if (shop) bindSeg('aseg', k => { state.advDays = +k; render(); });
     const log = $('#chatLog');
     // Full render only when the conversation changes (start / end of an answer).
     // While the AI is writing, only the live bubble is updated, at most ~4 times a second —
     // re-rendering the whole chat on every streamed token froze (and crashed) phones.
     const nearBottom = () => log.scrollHeight - log.scrollTop - log.clientHeight < 80;
     const drawLog = () => {
-      const msgs = state.chat.map(m => `<div class="msg ${m.role}">${m.role === 'assistant' ? `<div class="md">${AI.md(m.content)}</div>` : esc(m.content)}</div>`).join('');
+      const msgs = state.chat.map((m, i) => `<div class="msg ${m.role}">${m.role === 'assistant' ? `<div class="md">${AI.md(m.content)}</div>${m.content.length > 300 && window.AIPDF ? `<button class="btn sm ghost msg-pdf" data-pdf="${i}">${icon('download')}${t('save_pdf')}</button>` : ''}` : esc(m.content)}</div>`).join('');
       const live = state.aiBusy ? `<div class="msg assistant" id="liveMsg">${state.aiLive ? `<div class="md">${AI.md(state.aiLive)}</div>` : `<div class="typing"><i></i><i></i><i></i> ${t('thinking')}</div>`}</div>` : '';
       log.innerHTML = msgs + live || `<div class="empty">${icon('sparkle', 'big')}<p>${hasKey ? t('ask_ph') : t('no_key')}</p></div>`;
       log.scrollTop = log.scrollHeight;
+      $$('[data-pdf]', log).forEach(b => b.onclick = () => { const i = +b.dataset.pdf; const q = (state.chat[i - 1] || {}).content || ''; window.AIPDF.fromMarkdown(q.slice(0, 80) || t('advisor'), state.chat[i].content).catch(e => toast(e.message)); });
       $('#chips').classList.toggle('hide', state.chat.length > 0);
       $('#chatSend').innerHTML = state.aiBusy ? icon('x') : icon('send');
       $('#chatSend').title = state.aiBusy ? t('stop') : '';
@@ -989,7 +1004,7 @@
       $('#chatQ').blur(); // close the phone keyboard so the answer is visible
       const ctrl = new AbortController(); state.aiBusy = ctrl; state.aiLive = ''; drawLog();
       try {
-        const text = await AI.ask({ messages: state.chat, lang: I18N.lang, days: state.advDays, signal: ctrl.signal, onText: (txt) => { state.aiLive = txt; queuePaint(); },
+        const text = await AI.ask({ messages: state.chat, lang: I18N.lang, days: state.advDays, signal: ctrl.signal, confirm: window.BH && BH.aiConfirm, onText: (txt) => { state.aiLive = txt; queuePaint(); },
           onTool: (name) => { const el = $('#liveMsg'); if (el && !state.aiLive) el.innerHTML = `<div class="typing"><i></i><i></i><i></i> ${t('looking_up')}: ${esc(t('t_' + name))}…</div>`; } });
         state.chat.push({ role: 'assistant', content: text });
       } catch (e) {
@@ -1005,7 +1020,7 @@
     $$('#chips button').forEach(b => b.onclick = () => send(b.textContent));
     $$('[data-why]', v).forEach(b => b.onclick = () => send((I18N.lang === 'ar' ? 'اشرح هذه الملاحظة وما الذي يجب أن أفعله: ' : 'Explain this finding and what I should do about it: ') + b.dataset.why));
     if ($('#clrChat')) $('#clrChat').onclick = () => { if (state.aiBusy) state.aiBusy.abort(); state.chat = []; render(); };
-    $('#genRep').onclick = () => reportModal(state.advDays);
+    if ($('#genRep')) $('#genRep').onclick = () => reportModal(state.advDays);
     if (state.pendingQ) { const q = state.pendingQ; state.pendingQ = null; send(q); }
   }
 

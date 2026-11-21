@@ -4,7 +4,10 @@
 // so stock, orders and logs never get out of step.
 import pg from 'pg';
 import crypto from 'node:crypto';
-import { classify, verdict, canRead, redact, seesCosts, isOwner } from './perms.js';
+import { classify, verdict, canRead, canReadRow, redact, seesCosts, isOwner } from './perms.js';
+
+// called after changes are applied (notifications); set by index.js
+export const hooks = { afterApply: async () => {}, onRequest: async () => {}, onDecide: async () => {} };
 
 export function createPool(url) {
   const ssl = /sslmode=require|railway\.internal/.test(url) ? false : undefined;
@@ -45,6 +48,20 @@ export async function migrate(pool) {
     CREATE TABLE IF NOT EXISTS sync_runs (
       id bigserial PRIMARY KEY, supplier_id text NOT NULL, started_at bigint NOT NULL, finished_at bigint, ok boolean, items int, changed int, error text);
     CREATE TABLE IF NOT EXISTS kv (key text PRIMARY KEY, value jsonb);
+    ALTER TABLE supplier_items ADD COLUMN IF NOT EXISTS removed boolean NOT NULL DEFAULT false;
+    ALTER TABLE supplier_items ADD COLUMN IF NOT EXISTS part_no text;
+    ALTER TABLE supplier_items ALTER COLUMN available DROP NOT NULL;
+    CREATE TABLE IF NOT EXISTS supplier_changes (
+      id bigserial PRIMARY KEY, supplier_id text NOT NULL, sku text NOT NULL, kind text NOT NULL, title text, url text,
+      old_price numeric, new_price numeric, currency text, at bigint NOT NULL);
+    CREATE INDEX IF NOT EXISTS supplier_changes_at ON supplier_changes (at);
+    CREATE TABLE IF NOT EXISTS notifications (
+      id bigserial PRIMARY KEY, user_id text NOT NULL, at bigint NOT NULL, kind text, title text, body text, link text, read boolean NOT NULL DEFAULT false);
+    CREATE INDEX IF NOT EXISTS notifications_user ON notifications (user_id, at);
+    CREATE TABLE IF NOT EXISTS wa_messages (
+      id bigserial PRIMARY KEY, wamid text UNIQUE, wa_id text NOT NULL, direction text NOT NULL, type text, body text, name text,
+      at bigint NOT NULL, status text, kind text, ref text, user_id text, read boolean NOT NULL DEFAULT false, error text);
+    CREATE INDEX IF NOT EXISTS wa_messages_conv ON wa_messages (wa_id, at);
   `);
 }
 
@@ -59,7 +76,7 @@ export async function readState(pool, user) {
   const seq = (await pool.query('SELECT COALESCE(MAX(seq),0)::bigint AS s FROM rows')).rows[0].s;
   const data = {}, versions = {};
   for (const r of rows) {
-    if (!canRead(user, r.col, r.id)) continue;
+    if (!canRead(user, r.col, r.id) || !canReadRow(user, r.col, r.data)) continue;
     if (r.col === 'meta') { data[r.id] = r.data && Object.prototype.hasOwnProperty.call(r.data, '__v') ? r.data.__v : r.data; if (r.id === 'settings') data.settings = sanitizeSettings(user, data.settings); }
     else { (data[r.col] = data[r.col] || []).push(redact(user, r.col, r.data)); }
     versions[r.col + '/' + r.id] = r.version;
@@ -76,7 +93,7 @@ export async function changesSince(pool, user, since) {
   let seq = since || 0;
   for (const r of rows) {
     seq = r.seq;
-    if (!canRead(user, r.col, r.id)) continue;
+    if (!canRead(user, r.col, r.id) || (!r.deleted && !canReadRow(user, r.col, r.data))) continue;
     let d = r.deleted ? null : r.col === 'meta' ? (r.data && Object.prototype.hasOwnProperty.call(r.data, '__v') ? r.data.__v : r.data) : redact(user, r.col, r.data);
     if (r.col === 'meta' && r.id === 'settings' && d) d = sanitizeSettings(user, d);
     out.push({ col: r.col, id: r.id, data: d, deleted: r.deleted });
@@ -158,6 +175,12 @@ export async function evaluate(client, user, batch) {
     // never sync passwords or keys through data rows
     if (ch.col === 'meta' && ch.id === 'secrets') continue;
     const cls = classify(ch.col, ch.id, before, after);
+    if (ch.col === 'tasks' && !isOwner(user)) {
+      const mine = (x) => x && x.assignedTo === user.id;
+      const ownKeys = ['done', 'doneAt', 'status', 'notes', 'updated'];
+      if (cls.op === 'create' && mine(after) && after.createdBy === user.id) cls.self = true;
+      if (cls.op === 'update' && mine(before) && mine(after) && Object.keys(Object.assign({}, before, after)).every(k => ownKeys.includes(k) || JSON.stringify(before[k]) === JSON.stringify(after[k]))) cls.self = true;
+    }
     let v = verdict(user, cls);
     // discount limit at the till / on orders
     if (ch.col === 'sales' && !before && after && !isOwner(user)) {
@@ -198,6 +221,8 @@ async function stamp(client, user, p, actingFor) {
     }
     if (b && b.status !== a.status) { a.statusLog = (b.statusLog || []).concat([{ s: a.status, at: now(), by: who.id, name: who.name }]); a.handledBy = who.id; }
   }
+  if (col === 'tasks') { if (!b) { a.createdBy = a.createdBy || who.id; a.createdByName = who.name; a.created = a.created || now(); } if (a.done && !(b && b.done)) a.doneAt = now(); }
+  if (col === 'sales' && a.assignedTo && (!b || b.assignedTo !== a.assignedTo)) { const u = await client.query('SELECT name FROM users WHERE id=$1', [a.assignedTo]); a.assignedName = u.rows[0] ? u.rows[0].name : ''; a.assignedAt = now(); }
   if (!b && (col === 'quotes' || col === 'purchases')) { a.createdBy = who.id; a.createdByName = who.name; await uniqueNo(client, col, a); }
   if (b && col === 'quotes' && b.status !== a.status) a.statusLog = (b.statusLog || []).concat([{ s: a.status, at: now(), by: who.id, name: who.name }]);
   if (b && col === 'purchases' && b.status !== a.status) a.statusLog = (b.statusLog || []).concat([{ s: a.status, at: now(), by: who.id, name: who.name }]);
@@ -225,6 +250,7 @@ async function writeRow(client, user, col, id, value) {
   return value;
 }
 
+export { writeRow };
 export async function logActivity(db, user, kind, module, summary, meta) {
   await db.query('INSERT INTO activity (at,user_id,kind,module,summary,meta) VALUES ($1,$2,$3,$4,$5,$6)', [now(), user ? user.id : null, kind, module || null, String(summary).slice(0, 400), meta ? JSON.stringify(meta) : null]);
 }
@@ -243,9 +269,11 @@ export async function submit(pool, user, batch) {
       approvalId = uid('ap');
       await client.query('INSERT INTO approvals (id,user_id,created_at,summary,module,batch) VALUES ($1,$2,$3,$4,$5,$6)', [approvalId, user.id, now(), ev.summary, ev.module, JSON.stringify(ev.plan.map(p => p.change))]);
       await logActivity(client, user, 'request', ev.module, 'Asked for approval: ' + ev.summary, { approvalId });
+      await hooks.onRequest(client, user, ev.summary, approvalId);
       status = 'pending'; message = 'Sent to the owner for approval';
     } else {
       for (const p of ev.plan) { await stamp(client, user, p); await writeRow(client, user, p.change.col, p.change.id, p.after); }
+      await hooks.afterApply(client, user, ev.plan);
       await logActivity(client, user, 'change', ev.module, ev.summary, { cols: [...new Set(ev.plan.map(p => p.change.col))], ids: ev.plan.slice(0, 20).map(p => p.change.col + '/' + p.change.id) });
     }
     await client.query('COMMIT');
@@ -278,12 +306,14 @@ export async function decide(pool, owner, id, approve, note) {
       // re-check against current data, then apply as the owner on behalf of the employee
       const ev = await evaluate(client, owner, a.batch);
       for (const p of ev.plan) { await stamp(client, owner, p, requester || owner); await writeRow(client, owner, p.change.col, p.change.id, p.after); }
+      await hooks.afterApply(client, requester || owner, ev.plan);
       await logActivity(client, owner, 'approve', a.module, `Approved ${requester ? requester.name + "'s" : ''} request: ${a.summary}`, { approvalId: id, for: a.user_id });
       if (requester) await logActivity(client, requester, 'change', a.module, a.summary + ' (approved)', { approvalId: id });
     } else {
       await logActivity(client, owner, 'reject', a.module, `Rejected ${requester ? requester.name + "'s" : ''} request: ${a.summary}${note ? ' — ' + note : ''}`, { approvalId: id, for: a.user_id });
     }
     await client.query('UPDATE approvals SET status=$2, decided_by=$3, decided_at=$4, note=$5 WHERE id=$1', [id, approve ? 'approved' : 'rejected', owner.id, now(), (note || '').slice(0, 300)]);
+    await hooks.onDecide(client, a, approve, note);
     await client.query('COMMIT');
     return { ok: true, seq: await maxSeq(pool) };
   } catch (e) { await client.query('ROLLBACK').catch(() => {}); throw e; } finally { client.release(); }

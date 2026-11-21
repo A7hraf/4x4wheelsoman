@@ -15,6 +15,18 @@
   // (the admin writes a public copy of the catalog when you click "Preview website"; the admin database itself is encrypted)
   if (/[?&]preview\b/.test(location.search)) { const pv = store.get('x4w_preview', null) || store.get('x4w_db_v2', null); if (pv && Array.isArray(pv.products)) PRODUCTS = pv.products; }
   PRODUCTS = PRODUCTS.filter(p => p.active !== false && p.online !== false);
+  // Live availability from the Business Hub: products the supplier has run out of (and the shop has none)
+  // are hidden, or shown as "on order" with the expected delivery time — the owner chooses.
+  let AVAIL = {};
+  const avail = (p) => AVAIL[p.slug] || null;
+  if (window.X4W_API) {
+    fetch(String(window.X4W_API).replace(/\/+$/, '') + '/api/public/availability', { cache: 'no-cache' })
+      .then(r => (r.ok ? r.json() : null)).then(j => {
+        if (!j || !j.items) return; AVAIL = j.items;
+        PRODUCTS = PRODUCTS.filter(p => !(AVAIL[p.slug] && AVAIL[p.slug].m === 'hide'));
+        if (typeof render === 'function') render(true);
+      }).catch(() => { });
+  }
 
   let lang = store.get('x4w_lang', null) || (navigator.language || '').startsWith('ar') && 'ar' || 'en';
   const setDir = () => { document.documentElement.lang = lang; document.documentElement.dir = lang === 'ar' ? 'rtl' : 'ltr'; };
@@ -36,7 +48,7 @@
       foot_about: 'Off-road parts, accessories and upgrades for 4x4s in Oman.', f_shop: 'Shop', f_explore: 'Explore', f_touch: 'Get in touch', hours_short: 'Sat to Thu, 5 PM to 12 AM. Closed Friday.', qbox: 'Pay in up to 4 interest-free installments with Qpay.',
       rights: 'All rights reserved.', brands_note: 'Brand names and logos belong to their owners. 4x4 Wheels Oman is an independent retailer.', terms: 'Terms of service', privacy: 'Privacy policy', home: 'Home', shop: 'Shop',
       all_parts: 'All parts', all_cats: 'All categories', search: 'Search by name or part number', any_vehicle: 'Vehicle', any_brand: 'Brand', sort: 'Sort', s_feat: 'Featured', s_name: 'Name A–Z', s_brand: 'Brand', s_lo: 'Price: low to high', results: '{n} parts', no_results: 'No parts match. Ask us on WhatsApp — we can source most parts.', clear: 'Clear filters',
-      part_no: 'Part number', avail: 'Availability', ask_stock: 'Ask us for stock', in_stock: 'In stock', ask_price: 'Ask for the price on WhatsApp', add_quote: 'Add to quote', in_quote: 'In your quote list', added: 'Added to your quote list', view_list: 'View list',
+      part_no: 'Part number', avail: 'Availability', ask_stock: 'Ask us for stock', in_stock: 'In stock', on_order: 'Out of stock · on order, about {d} days', on_order_t: 'Out of stock right now. Order it and we bring it for you: delivery in about {d} days.', ask_price: 'Ask for the price on WhatsApp', add_quote: 'Add to quote', in_quote: 'In your quote list', added: 'Added to your quote list', view_list: 'View list',
       will_fit: 'Will it fit your vehicle?', pick_mm: 'Pick your make and model.', fits_yes: 'Fits your {v}', fits_no: "Not listed for the {v} — ask us, we may have a version that fits.", fits_ask: "Ask us to confirm fitment for the {v}.", fits_uni: 'Universal fit — works with most 4x4s.',
       perk1: 'Genuine brand parts', perk1d: 'Sourced for the brands we carry.', perk2: 'Fitment checked', perk2d: 'We confirm it fits before you pay.', perk3: 'Pickup in Al Maabela', perk3d: 'Or ask us about delivery.', perk4: 'Pay in 4 with Qpay', perk4d: 'Interest-free on orders up to {x} rial.',
       overview: 'Overview', specifications: 'Specifications', fitment: 'Fitment', about_brand: 'About the brand', how_order: 'How ordering works', brand: 'Brand', category: 'Category', fits: 'Fits', mfr: "Manufacturer's website", shop_all_brand: 'Shop all {b}',
@@ -71,7 +83,7 @@
       foot_about: 'قطع وإكسسوارات وتعديلات لسيارات الدفع الرباعي في عُمان.', f_shop: 'تسوّق', f_explore: 'تصفّح', f_touch: 'تواصل معنا', hours_short: 'من السبت إلى الخميس، 5 مساءً حتى 12 منتصف الليل. الجمعة مغلق.', qbox: 'قسّط مشترياتك على 4 دفعات بدون فوائد مع Qpay.',
       rights: 'جميع الحقوق محفوظة.', brands_note: 'أسماء العلامات التجارية وشعاراتها ملك لأصحابها. 4x4 Wheels عُمان متجر مستقل.', terms: 'شروط الخدمة', privacy: 'سياسة الخصوصية', home: 'الرئيسية', shop: 'المتجر',
       all_parts: 'كل القطع', all_cats: 'كل الفئات', search: 'ابحث بالاسم أو رقم القطعة', any_vehicle: 'السيارة', any_brand: 'العلامة', sort: 'الترتيب', s_feat: 'المميزة', s_name: 'الاسم', s_brand: 'العلامة', s_lo: 'السعر: من الأقل', results: '{n} قطعة', no_results: 'لا توجد قطع مطابقة. اسألنا على واتساب — نستطيع توفير معظم القطع.', clear: 'مسح الفلاتر',
-      part_no: 'رقم القطعة', avail: 'التوفر', ask_stock: 'اسألنا عن التوفر', in_stock: 'متوفر', ask_price: 'اسأل عن السعر عبر واتساب', add_quote: 'أضف إلى عرض السعر', in_quote: 'في قائمة عرض السعر', added: 'أضيفت إلى قائمة عرض السعر', view_list: 'عرض القائمة',
+      part_no: 'رقم القطعة', avail: 'التوفر', ask_stock: 'اسألنا عن التوفر', in_stock: 'متوفر', on_order: 'غير متوفر · عند الطلب، حوالي {d} يوماً', on_order_t: 'غير متوفر حالياً. اطلبه ونوفره لك: التوصيل خلال {d} يوماً تقريباً.', ask_price: 'اسأل عن السعر عبر واتساب', add_quote: 'أضف إلى عرض السعر', in_quote: 'في قائمة عرض السعر', added: 'أضيفت إلى قائمة عرض السعر', view_list: 'عرض القائمة',
       will_fit: 'هل تناسب سيارتك؟', pick_mm: 'اختر الماركة والموديل.', fits_yes: 'تناسب {v}', fits_no: 'غير مدرجة لـ {v} — اسألنا، قد تتوفر نسخة مناسبة.', fits_ask: 'اسألنا لتأكيد التوافق مع {v}.', fits_uni: 'تناسب جميع السيارات تقريباً.',
       perk1: 'قطع أصلية', perk1d: 'من العلامات التي نوفرها.', perk2: 'نتأكد من التوافق', perk2d: 'نؤكد أنها تناسب سيارتك قبل الدفع.', perk3: 'الاستلام من المعبيلة', perk3d: 'أو اسألنا عن التوصيل.', perk4: 'قسّطها على 4 مع Qpay', perk4d: 'بدون فوائد للطلبات حتى {x} ريال.',
       overview: 'نظرة عامة', specifications: 'المواصفات', fitment: 'التوافق', about_brand: 'عن العلامة التجارية', how_order: 'كيف تطلب', brand: 'العلامة التجارية', category: 'الفئة', fits: 'تناسب', mfr: 'موقع الشركة المصنعة', shop_all_brand: 'كل منتجات {b}',
@@ -168,7 +180,7 @@
     const inQ = quote.some(l => l.slug === p.slug);
     const off = hasPrice(p) && p.oldPrice > p.price;
     return `<article class="card"><a class="img" href="#/p/${p.slug}" style="position:relative">${img(p)}${off ? `<span class="sale">-${Math.round((1 - p.price / p.oldPrice) * 100)}%</span>` : ''}</a>
-      <div class="bd"><span class="br">${esc(brandOf(p.brand).label || catName(p.category))}</span><a class="nm" href="#/p/${p.slug}">${esc(L(p, 'name'))}</a><span class="ft">${esc(fitsText(p))}</span>
+      <div class="bd"><span class="br">${esc(brandOf(p.brand).label || catName(p.category))}</span><a class="nm" href="#/p/${p.slug}">${esc(L(p, 'name'))}</a><span class="ft">${esc(fitsText(p))}</span>${avail(p) ? `<span class="bo">${t('on_order', { d: avail(p).d })}</span>` : ''}
         <div class="pr"><span>${hasPrice(p) ? `<b>${money(p.price)}</b>${off ? `<s>${fmt(p.oldPrice)}</s>` : ''}` : t('price_req')}</span><button class="add ${inQ ? 'in' : ''}" data-add="${p.slug}" aria-label="${t('add_quote')}">${icon(inQ ? 'check' : 'plus')}</button></div></div></article>`;
   }
   const crumbs = (items) => `<nav class="crumbs">${items.map((x, i) => i < items.length - 1 ? `<a href="${x[1]}">${esc(x[0])}</a><span class="sep">›</span>` : `<span>${esc(x[0])}</span>`).join('')}</nav>`;
@@ -260,6 +272,7 @@
     const moreC = PRODUCTS.filter(x => x.category === p.category && x.slug !== p.slug && !more.includes(x)).slice(0, 4);
     const fitV = (p.vehicles || []).map(veh).filter(Boolean);
     const stockOk = S.showStock && p.stock > 0;
+    const bo = avail(p);
     return `${header(true)}
       <div class="wrap" style="padding-top:26px">${crumbs([[t('home'), '#/'], [t('shop'), '#/shop'], [catName(p.category), '#/shop?c=' + p.category], [L(p, 'name'), '']])}
       <div class="pdp">
@@ -267,7 +280,7 @@
         <div>
           <div class="bt">${esc(b.label || catName(p.category))}</div><h1>${esc(L(p, 'name'))}</h1>${p.partNumber ? `<div class="pn">${t('part_no')}: ${esc(p.partNumber)}</div>` : ''}<div class="redline"></div>
           <div class="buybox">
-            <div class="top"><span class="price">${hasPrice(p) ? `${money(p.price)}${p.oldPrice > p.price ? `<s>${fmt(p.oldPrice)}</s>` : ''}` : t('price_req')}</span><span class="avail ${stockOk ? 'ok' : ''}">${t('avail')}: ${stockOk ? t('in_stock') : t('ask_stock')}</span></div>
+            <div class="top"><span class="price">${hasPrice(p) ? `${money(p.price)}${p.oldPrice > p.price ? `<s>${fmt(p.oldPrice)}</s>` : ''}` : t('price_req')}</span><span class="avail ${stockOk ? 'ok' : ''} ${bo && !stockOk ? 'bo' : ''}">${t('avail')}: ${stockOk ? t('in_stock') : bo ? t('on_order', { d: bo.d }) : t('ask_stock')}</span></div>${bo && !stockOk ? `<p class="bo-note">${t('on_order_t', { d: bo.d })}</p>` : ''}
             <a class="btn red block" href="${wa(t('wa_q_part', { p: p.name, pn: p.partNumber || p.sku }))}" target="_blank" rel="noopener">${WA}${t('ask_price')}</a>
             <div class="qrow"><div class="qty"><button data-q="-1" aria-label="-">−</button><span id="pq">1</span><button data-q="1" aria-label="+">+</button></div><button class="btn" id="addQ">${quote.some(l => l.slug === p.slug) ? icon('check') + t('in_quote') : t('add_quote')}</button></div>
             <div class="fitbox"><b>${t('will_fit')}</b><p>${t('pick_mm')}</p><div id="fitPick"></div><div id="fitRes"></div></div>

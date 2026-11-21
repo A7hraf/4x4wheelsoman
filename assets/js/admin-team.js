@@ -58,7 +58,9 @@
     // SUPPLIERS: settings, costs and prices
     // =====================================================
     const FX = { OMR: 1, AED: 0.1047, USD: 0.3845, SAR: 0.1025, QAR: 0.1056, EUR: 0.42, KWD: 1.25, BHD: 1.02 };
-    const PLAT = { shopify: L('Automatic · Shopify', 'تلقائي · Shopify'), magento: L('Automatic · Magento', 'تلقائي · Magento'), manual: L('Manual (link + price)', 'يدوي (رابط + سعر)') };
+    const PLAT = { shopify: L('Automatic · Shopify', 'تلقائي · Shopify'), magento: L('Automatic · Magento', 'تلقائي · Magento'), sitemap: L('Product list from website (no prices)', 'قائمة المنتجات من الموقع (بدون أسعار)'), links: L('Product links · checked daily', 'روابط المنتجات · تُفحص يومياً'), manual: L('Manual (link + price)', 'يدوي (رابط + سعر)') };
+    const AUTO_P = ['shopify', 'magento', 'sitemap', 'links'];
+    const OUT_MODES = () => [['default', L('Use the shop setting', 'حسب إعداد المتجر')], ['backorder', L('Show "on order" with delivery time', 'إظهار "عند الطلب" مع مدة التوصيل')], ['hide', L('Hide from the website', 'إخفاء من الموقع')], ['show', L('Keep showing normally', 'إظهار عادي')]];
     // The owner's real suppliers (from the websites he buys from)
     const KNOWN = [
       { name: 'AM Wrangler', website: 'https://am-wrangler.com', platform: 'shopify', currency: 'AED', addVatPct: 0, country: 'UAE', howToOrder: 'Shopify online shop. Use "Open cart on website" to get a ready cart with the items, or send the list on WhatsApp. Prices on the site are in AED.' },
@@ -190,7 +192,7 @@
           ${kpi('cart', 'tone-brand', L('Lines to buy', 'بنود للشراء'), `<span class="num">${lines.length}</span>`, `<span>${lines.reduce((a, l) => a + l.it.toBuy, 0)} ${L('items for customer orders', 'قطعة لطلبات العملاء')}</span>`)}
           ${kpi('truck', 'tone-warn', L('Open supplier orders', 'طلبات موردين مفتوحة'), `<span class="num">${openPOs().length}</span>`, seesCosts() ? `<span>${moneyTxt(openPOs().reduce((a, p) => a + (p.total || 0), 0), 0)}</span>` : '')}
           ${seesCosts() ? kpi('wallet', 'tone-info', L('Bought this month', 'المشتريات هذا الشهر'), H.big(spentMonth), '') : ''}
-          ${kpi('factory', 'tone-violet', t('suppliers'), `<span class="num">${list.filter(s => s.active !== false).length}</span>`, `<span>${list.filter(s => ['shopify', 'magento'].includes(s.platform)).length} ${L('synced automatically', 'متزامن تلقائياً')}</span>`)}
+          ${kpi('factory', 'tone-violet', t('suppliers'), `<span class="num">${list.filter(s => s.active !== false).length}</span>`, `<span>${list.filter(s => AUTO_P.includes(s.platform)).length} ${L('checked automatically', 'تُفحص تلقائياً')}</span>`)}
         </div>
         ${known.length && edit && !online() ? `<div class="notice mt">${icon('sparkle')}<div><b>${L('Add the suppliers you buy from', 'أضف الموردين الذين تشتري منهم')}</b><br>${known.map(k => esc(k.name)).join(' · ')}<div class="actions" style="margin-top:8px"><button class="btn sm primary" id="supKnown">${icon('plus')}${L('Add them', 'إضافتهم')}</button></div></div></div>` : ''}
         ${noSup.length ? `<div class="card mt"><div class="card-h"><h3>${icon('alert')} ${L('Order lines with no supplier', 'بنود بدون مورد')}</h3></div><div class="card-b" style="padding:8px 0 0"><div class="table-wrap"><table class="t"><thead><tr><th>${t('order')}</th><th>${t('product')}</th><th class="r">${L('To buy', 'للشراء')}</th><th>${t('supplier')}</th></tr></thead><tbody>
@@ -217,18 +219,19 @@
       const all = D().purchases.filter(p => p.supplierId === s.id).sort((a, b) => b.date - a.date);
       const prods = D().products.filter(p => sourceOf(p, s.id));
       const edit = can('purchases', 'request') || can('suppliers', 'request');
-      const auto = ['shopify', 'magento'].includes(s.platform);
+      const auto = AUTO_P.includes(s.platform);
       const stats = online() && can('suppliers') ? load('supstats', () => Auth.api('GET', '/api/suppliers/stats')) : null;
       const x = (stats && stats.data && stats.data.stats && stats.data.stats[s.id]) || {};
       const tabs = [['buy', t('to_buy'), lines.length + restock.length], ['orders', t('sup_orders'), open.length], ['history', t('history'), 0], ['products', t('products'), prods.length], ['how', t('how_to_buy'), 0]];
       v.innerHTML = `
         <div class="page-head"><div><a class="back" href="#/suppliers">← ${t('suppliers')}</a><h2 style="display:block">${esc(s.name)}</h2><p>${esc(PLAT[s.platform] || '')}${s.website ? ` · <a href="${esc(s.website)}" target="_blank" rel="noopener">${esc(host(s.website))} ↗</a>` : ''}${s.leadDays ? ` · ${L('delivery', 'التوصيل')} ~${s.leadDays} ${L('days', 'يوم')}` : ''}</p></div>
-          <div class="actions">${s.whatsapp || s.phone ? `<a class="btn wa" target="_blank" rel="noopener" href="${esc(waLink(s.whatsapp || s.phone, L('Hello', 'مرحباً')))}">${H.WA || icon('whatsapp')}WhatsApp</a>` : ''}${s.phone ? `<a class="btn" href="tel:${esc(s.phone)}">${icon('phone')}${t('phone')}</a>` : ''}${auto && online() && can('suppliers', 'edit') ? `<button class="btn" id="supSync">${icon('refresh')}${L('Sync catalog', 'مزامنة الكتالوج')}</button>` : ''}<a class="btn primary" href="#/sourcing" id="supBrowse">${icon('search')}${L('Find products', 'ابحث عن منتجات')}</a></div></div>
+          <div class="actions">${s.whatsapp || s.phone ? `<a class="btn wa" target="_blank" rel="noopener" href="${esc(waLink(s.whatsapp || s.phone, L('Hello', 'مرحباً')))}">${H.WA || icon('whatsapp')}WhatsApp</a>` : ''}${s.phone ? `<a class="btn" href="tel:${esc(s.phone)}">${icon('phone')}${t('phone')}</a>` : ''}${auto && online() && can('suppliers', 'edit') ? `<button class="btn" id="supSync">${icon('refresh')}${L('Sync catalog', 'مزامنة الكتالوج')}</button>` : ''}${can('suppliers', 'edit') ? `<button class="btn" id="supImport">${icon('upload')}${L('Import price list', 'استيراد قائمة أسعار')}</button>` : ''}<a class="btn primary" href="#/sourcing" id="supBrowse">${icon('search')}${L('Find products', 'ابحث عن منتجات')}</a></div></div>
         ${x.lastRun ? `<p class="faint" style="margin:-6px 0 12px;font-size:12.5px">${x.items || 0} ${L('products in catalog', 'منتج في الكتالوج')} · ${L('last sync', 'آخر مزامنة')} ${ago(x.lastRun.done || x.lastRun.at)}${x.lastRun.ok === false ? ` · <span class="bad-t">${esc(x.lastRun.error || '')}</span>` : x.lastRun.changed ? ` · ${x.lastRun.changed} ${L('price changes', 'تغيير سعر')}` : ''}</p>` : ''}
         <div class="tabs" role="tablist">${tabs.map(([k, l, n]) => `<button role="tab" data-tab="${k}" class="${tab === k ? 'on' : ''}">${l}${n ? ` <span class="count">${n}</span>` : ''}</button>`).join('')}</div>
         <div id="supBody" class="mt"></div>`;
       const body = $('#supBody');
       $$('[data-tab]', v).forEach(b => b.onclick = () => { state.supTab = b.dataset.tab; H.render(); });
+      if ($('#supImport')) $('#supImport').onclick = () => importModal(s);
       if ($('#supBrowse')) $('#supBrowse').onclick = () => { state.srcSup = auto ? s.id : ''; state.srcTab = auto ? 'search' : 'mine'; };
       if ($('#supSync')) $('#supSync').onclick = async (e) => {
         const b = e.currentTarget; b.disabled = true; b.innerHTML = `<span class="typing"><i></i><i></i><i></i></span> ${L('Syncing… (a minute)', 'جارٍ المزامنة… (دقيقة)')}`;
@@ -398,18 +401,19 @@
     // SOURCING: supplier catalogues → my products
     // =====================================================
     VIEWS.sourcing = function (v) {
-      if (['search', 'mine', 'changes'].includes(state.sub)) state.srcTab = state.sub;
+      if (['search', 'mine', 'changes', 'updates'].includes(state.sub)) state.srcTab = state.sub;
       const tab = state.srcTab || (online() ? 'search' : 'mine');
-      const auto = D().suppliers.filter(s => ['shopify', 'magento'].includes(s.platform) && s.active !== false);
+      const auto = D().suppliers.filter(s => AUTO_P.includes(s.platform) && s.active !== false);
       const mine = D().products.filter(p => (p.sources || []).length);
       v.innerHTML = `
         <div class="page-head"><div><h2>${t('sourcing')}</h2><p>${L('Pick products from your suppliers, set your margin and selling price, and watch their prices.', 'اختر منتجات من الموردين، وحدد هامش ربحك وسعر البيع، وراقب أسعارهم.')}</p></div><div class="actions">${can('inventory', 'request') ? `<button class="btn" id="srcManual">${icon('link')}${L('Add from a link', 'إضافة من رابط')}</button>` : ''}</div></div>
-        <div class="tabs" role="tablist">${[['search', L('Search catalogs', 'البحث في الكتالوجات')], ['mine', L('My sourced products', 'منتجاتي من الموردين'), alerts.n ? alerts.n + ' !' : mine.length], ['changes', L('Price changes', 'تغيّر الأسعار')]].map(([k, l, n]) => `<button role="tab" data-tab="${k}" class="${tab === k ? 'on' : ''}">${l}${n ? ` <span class="count">${n}</span>` : ''}</button>`).join('')}</div>
+        <div class="tabs" role="tablist">${[['search', L('Search catalogs', 'البحث في الكتالوجات')], ['updates', L('Supplier updates', 'تحديثات الموردين'), online() ? Auth.inbox().supplierChanges : 0], ['mine', L('My sourced products', 'منتجاتي من الموردين'), alerts.n ? alerts.n + ' !' : mine.length], ['changes', L('Price changes', 'تغيّر الأسعار')]].map(([k, l, n]) => `<button role="tab" data-tab="${k}" class="${tab === k ? 'on' : ''}">${l}${n ? ` <span class="count">${n}</span>` : ''}</button>`).join('')}</div>
         <div id="srcBody" class="mt"></div>`;
       $$('[data-tab]', v).forEach(b => b.onclick = () => { state.srcTab = b.dataset.tab; if (state.sub) location.hash = '#/sourcing/' + b.dataset.tab; else H.render(); });
       if ($('#srcManual')) $('#srcManual').onclick = () => sourceModal(null, null);
       const body = $('#srcBody');
       if (!online() && tab !== 'mine') { body.innerHTML = `<div class="notice">${icon('alert')}<div>${L('Searching the suppliers\' full catalogs needs the online server (it copies their product lists every night). You can still add products from a link.', 'البحث في كتالوجات الموردين الكاملة يحتاج الخادم (ينسخ قوائم منتجاتهم كل ليلة). يمكنك إضافة منتجات من رابط.')}</div></div>`; return; }
+      if (tab === 'updates') return updatesTab(body, mine);
       if (tab === 'search') {
         if (!auto.length) { body.innerHTML = `<div class="notice">${icon('factory')}<div>${L('No supplier with an automatic catalog yet. Add AM Wrangler or Offroad Zone in Suppliers, then sync.', 'لا يوجد مورد بكتالوج تلقائي بعد. أضف AM Wrangler أو Offroad Zone في الموردين ثم زامن.')} <a href="#/suppliers">${t('suppliers')} →</a></div></div>`; return; }
         const q = state.srcQ || '', sid = state.srcSup || '', av = state.srcAvail ? '1' : '', pg = state.srcPage || 1;
@@ -480,21 +484,111 @@
           ${pick ? `<label class="src-pick" title="${L('Select', 'تحديد')}"><input type="checkbox" data-pick="${k}" aria-label="${esc(L('Select', 'تحديد') + ' ' + i.title)}"></label>` : ''}
           <div class="src-img">${i.image ? `<img src="${esc(i.image)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : icon('image')}</div>
           <div class="src-b"><div class="src-sup">${esc(s.name)} · ${esc(i.sku)}</div><a class="src-t" href="${esc(i.url)}" target="_blank" rel="noopener">${esc(i.title)}</a>
-            <div class="src-p">${i.price != null ? `<b>${curTxt(i.price, i.currency)}</b>${i.compareAt ? ` <s class="faint">${fmt(i.compareAt, 2)}</s>` : ''}<span class="faint"> → ${L('cost', 'تكلفة')} ${moneyTxt(landed(s, i.price))}</span>` : `<span class="faint">${L('Price hidden (no cost permission)', 'السعر مخفي (بدون صلاحية التكلفة)')}</span>`}</div>
-            <div class="src-tags">${i.available ? `<span class="pill s-delivered">${L('In stock', 'متوفر')}</span>` : `<span class="pill s-cancelled">${L('Out of stock', 'غير متوفر')}</span>`}${i.vendor ? `<span class="pill plain">${esc(i.vendor)}</span>` : ''}${(i.also || []).length ? `<span class="pill plain ${cheaper.length ? 's-new' : ''}" title="${esc(i.also.map(a => supName(a.supplierId) + (a.price != null ? ' ' + curTxt(a.price, a.currency) : '')).join(' · '))}">${cheaper.length ? L('Cheaper at ', 'أرخص لدى ') + esc(supName(cheaper[0].supplierId)) : L('Also at ', 'متوفر أيضاً لدى ') + esc(supName(i.also[0].supplierId))}</span>` : ''}</div>
+            <div class="src-p">${i.price != null ? `<b>${curTxt(i.price, i.currency)}</b>${i.compareAt ? ` <s class="faint">${fmt(i.compareAt, 2)}</s>` : ''}<span class="faint"> → ${L('cost', 'تكلفة')} ${moneyTxt(landed(s, i.price))}</span>` : seesCosts() ? `<span class="faint">${L('Price not on their website — ask the supplier', 'السعر غير معروض في موقعهم — اسأل المورد')}</span>` : `<span class="faint">${L('Price hidden (no cost permission)', 'السعر مخفي (بدون صلاحية التكلفة)')}</span>`}</div>
+            <div class="src-tags">${i.available === true ? `<span class="pill s-delivered">${L('In stock', 'متوفر')}</span>` : i.available === false ? `<span class="pill s-cancelled">${L('Out of stock', 'غير متوفر')}</span>` : `<span class="pill plain">${L('Stock: ask', 'التوفر: اسأل')}</span>`}${i.vendor ? `<span class="pill plain">${esc(i.vendor)}</span>` : ''}${(i.also || []).length ? `<span class="pill plain ${cheaper.length ? 's-new' : ''}" title="${esc(i.also.map(a => supName(a.supplierId) + (a.price != null ? ' ' + curTxt(a.price, a.currency) : '')).join(' · '))}">${cheaper.length ? L('Cheaper at ', 'أرخص لدى ') + esc(supName(cheaper[0].supplierId)) : L('Also at ', 'متوفر أيضاً لدى ') + esc(supName(i.also[0].supplierId))}</span>` : ''}</div>
             ${can('inventory', 'request') ? `<button class="btn sm ${has ? '' : 'primary'} block" data-add="${k}">${has ? icon('check') + L('In my products · edit', 'ضمن منتجاتي · تعديل') : icon('plus') + L('Add to my products', 'أضف إلى منتجاتي')}</button>` : ''}</div></div>`;
       }).join('')}</div>${pages > 1 ? `<div class="pager"><button class="btn sm" data-pg="${d.page - 1}" ${d.page <= 1 ? 'disabled' : ''}>← ${L('Previous', 'السابق')}</button><span class="faint">${L('Page', 'صفحة')} ${d.page} / ${pages}</span><button class="btn sm" data-pg="${d.page + 1}" ${d.page >= pages ? 'disabled' : ''}>${L('Next', 'التالي')} →</button></div>` : ''}`;
+    }
+    // ---------- supplier updates: what changed, and what to do about it ----------
+    const KINDS = () => ({ price_up: [L('Price up', 'ارتفع السعر'), 's-cancelled'], price_down: [L('Price down', 'انخفض السعر'), 's-delivered'], out: [L('Out of stock', 'نفد'), 's-cancelled'], back: [L('Back in stock', 'عاد متوفراً'), 's-delivered'], new: [L('New product', 'منتج جديد'), 's-new'], removed: [L('Removed', 'أُزيل'), 's-cancelled'] });
+    function keepPriceOrMargin(p, sid, sku, newPrice, how) {
+      const s = sup(DB.supplier(sid)); const src = (p.sources || []).find(x => x.supplierId === sid && x.sku === sku); if (!src) return;
+      const newCost = landed(s, newPrice);
+      const mk = p.marginPct != null ? +p.marginPct : (p.cost ? Math.round((p.price / p.cost - 1) * 1000) / 10 : s.defaultMarkup);
+      src.price = newPrice; src.checkedAt = Date.now();
+      const pref = (p.sources.find(x => x.preferred) || p.sources[0]) === src;
+      if (pref) p.cost = newCost;
+      if (how === 'margin' && pref) { p.price = sellPrice(newCost, mk, s.roundTo); p.marginPct = mk; }
+    }
+    function updatesTab(body, mine) {
+      const days = state.updDays || 7, kind = state.updKind || '', onlyMine = state.updMine !== false;
+      const res = load(`upd:${days}|${kind}`, () => Auth.api('GET', `/api/supplier-changes?days=${days}${kind ? '&kind=' + kind : ''}`), 60000);
+      if (res.data && Auth.inbox().supplierChanges) Auth.api('POST', '/api/supplier-changes/seen').then(() => { Auth.inbox().supplierChanges = 0; if (H.renderShell) H.renderShell(); }).catch(() => { });
+      const bySrc = new Map(); mine.forEach(p => (p.sources || []).forEach(x => bySrc.set(x.supplierId + '|' + x.sku, p)));
+      const all = (res.data && res.data.items) || [];
+      const rows = all.filter(c => !onlyMine || bySrc.has(c.supplierId + '|' + c.sku));
+      const K = KINDS(); const cnt = (k) => all.filter(c => c.kind === k).length;
+      const ownerSet = !online() || Auth.can('settings', 'request');
+      body.innerHTML = `<div class="notice">${icon('refresh')}<div>${L('Every night the suppliers are checked again: price changes, products out of stock or back, new products and removed ones are listed here. Products you sell are marked so you can decide what to do.', 'كل ليلة يُعاد فحص الموردين: تغيّر الأسعار، المنتجات النافدة أو العائدة، الجديدة والمحذوفة تظهر هنا. المنتجات التي تبيعها مميزة لتقرر ما تفعل.')}</div></div>
+        <div class="upd-bar mt"><div class="seg" id="updDays">${[[1, L('Today', 'اليوم')], [7, L('7 days', '7 أيام')], [30, L('30 days', '30 يوماً')]].map(([k, l]) => `<button data-k="${k}" class="${days === k ? 'on' : ''}">${l}</button>`).join('')}</div>
+          <select class="input sm" id="updKind"><option value="">${L('All changes', 'كل التغييرات')}</option>${[['price_up,price_down', L('Price changes', 'تغيّر الأسعار')], ['out', K.out[0]], ['back', K.back[0]], ['new', K.new[0]], ['removed', K.removed[0]]].map(([k, l]) => `<option value="${k}" ${kind === k ? 'selected' : ''}>${l}</option>`).join('')}</select>
+          <label class="check"><input type="checkbox" id="updMine" ${onlyMine ? 'checked' : ''}> ${L('Only products I sell', 'فقط المنتجات التي أبيعها')}</label>
+          ${ownerSet ? `<label class="bulk-f">${L('When a supplier runs out:', 'عند نفاد المنتج لدى المورد:')} <select class="input sm" id="updMode">${OUT_MODES().slice(1).map(([k, l]) => `<option value="${k}" ${(D().settings.supplierOutMode || 'backorder') === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>` : ''}</div>
+        <div class="upd-chips">${Object.keys(K).map(k => `<span class="pill ${K[k][1]}">${K[k][0]}: ${cnt(k)}</span>`).join('')}</div>
+        <div class="card mt"><div class="card-b" style="padding:8px 0 0"><div class="table-wrap">${res.err ? errBox(res.err) : !res.data ? spinner : rows.length ? `<table class="t"><thead><tr><th>${t('date')}</th><th>${t('product')}</th><th>${L('Change', 'التغيير')}</th><th>${L('What to do', 'الإجراء')}</th></tr></thead><tbody>
+          ${rows.slice(0, 400).map((c, i) => { const p = bySrc.get(c.supplierId + '|' + c.sku); const k = K[c.kind] || [c.kind, '']; const s = sup(DB.supplier(c.supplierId));
+            const priceTxt = c.kind.startsWith('price') ? `${curTxt(c.oldPrice, c.currency)} → <b>${curTxt(c.price, c.currency)}</b>${c.oldPrice ? ` (${c.price > c.oldPrice ? '+' : ''}${((c.price - c.oldPrice) / c.oldPrice * 100).toFixed(1)}%)` : ''}` : c.price != null && seesCosts() ? curTxt(c.price, c.currency) : '';
+            let act = '';
+            if (p && c.kind.startsWith('price') && can('pricing', 'request') && c.price != null) { const mk = p.marginPct != null ? +p.marginPct : (p.cost ? (p.price / p.cost - 1) * 100 : s.defaultMarkup); act = `<button class="btn sm" data-keep="price" data-i="${i}">${L('Keep my price', 'أبقِ سعري')}</button><button class="btn sm primary" data-keep="margin" data-i="${i}">${L('Keep margin', 'أبقِ الهامش')} → ${moneyTxt(sellPrice(landed(s, c.price), mk, s.roundTo))}</button>`; }
+            else if (p && (c.kind === 'out' || c.kind === 'removed') && can('inventory', 'request')) act = `<select class="input sm" data-mode="${p.id}">${OUT_MODES().map(([m, l]) => `<option value="${m}" ${(p.outMode || 'default') === m ? 'selected' : ''}>${l}</option>`).join('')}</select>`;
+            else if (!p && c.kind === 'new' && can('inventory', 'request')) act = `<button class="btn sm primary" data-addnew="${i}">${icon('plus')}${L('Add to my products', 'أضف إلى منتجاتي')}</button>`;
+            return `<tr class="${p ? 'hl' : ''}"><td class="muted">${fDate(c.at)}</td><td>${p ? `<span class="pill s-delivered">${L('I sell this', 'أبيعه')}</span> ` : ''}${c.url ? `<a href="${esc(c.url)}" target="_blank" rel="noopener">${esc(c.title || c.sku)}</a>` : esc(c.title || c.sku)}<div class="faint">${esc(s.name)} · ${esc(c.sku)}${p ? ' · ' + esc(p.name) + ' (' + money(p.price) + ')' : ''}</div></td><td><span class="pill ${k[1]}">${k[0]}</span><div style="font-size:12.5px">${priceTxt}</div></td><td class="actions">${act}</td></tr>`; }).join('')}
+          </tbody></table>${rows.length > 400 ? `<p class="faint" style="padding:8px 14px">${L('Showing the first 400.', 'عرض أول 400.')}</p>` : ''}` : `<div class="empty">${icon('check')} ${onlyMine ? L('None of your products changed at the suppliers.', 'لم يتغير أي من منتجاتك لدى الموردين.') : L('No changes.', 'لا تغييرات.')}</div>`}</div></div></div>`;
+      H.bindSeg('updDays', k => { state.updDays = +k; H.render(); });
+      $('#updKind', body).onchange = (e) => { state.updKind = e.target.value; H.render(); };
+      $('#updMine', body).onchange = (e) => { state.updMine = e.target.checked; H.render(); };
+      if ($('#updMode', body)) $('#updMode', body).onchange = (e) => { D().settings.supplierOutMode = e.target.value; DB.save(); toast(t('saved')); };
+      $$('[data-keep]', body).forEach(b => b.onclick = () => { const c = rows[+b.dataset.i]; const p = bySrc.get(c.supplierId + '|' + c.sku); keepPriceOrMargin(DB.product(p.id), c.supplierId, c.sku, c.price, b.dataset.keep); DB.save(); toast(t('saved')); checkAlerts(); H.render(); });
+      $$('[data-mode]', body).forEach(sel => sel.onchange = () => { const p = DB.product(sel.dataset.mode); p.outMode = sel.value; DB.save(); toast(t('saved')); });
+      $$('[data-addnew]', body).forEach(b => b.onclick = () => { const c = rows[+b.dataset.addnew]; sourceModal({ supplierId: c.supplierId, sku: c.sku, url: c.url, title: c.title, price: c.price, currency: c.currency, available: true }, null); });
+    }
+    // ---------- price list from the supplier (CSV / pasted from Excel) ----------
+    function parseTable(text) {
+      const line1 = text.split(/\r?\n/)[0] || '';
+      const sep = line1.includes('\t') ? '\t' : (line1.split(';').length > line1.split(',').length ? ';' : ',');
+      const rows = []; let row = [], cell = '', q = false;
+      for (let i = 0; i < text.length; i++) {
+        const ch = text[i];
+        if (q) { if (ch === '"' && text[i + 1] === '"') { cell += '"'; i++; } else if (ch === '"') q = false; else cell += ch; continue; }
+        if (ch === '"') q = true; else if (ch === sep) { row.push(cell); cell = ''; } else if (ch === '\n') { row.push(cell); rows.push(row); row = []; cell = ''; } else if (ch !== '\r') cell += ch;
+      }
+      if (cell || row.length) { row.push(cell); rows.push(row); }
+      return rows.filter(r => r.some(c => String(c).trim()));
+    }
+    const COLS_RE = { sku: /sku|code|part|item|model|ref|رمز|كود|رقم/i, title: /name|title|desc|product|اسم|وصف|منتج/i, price: /price|cost|rate|amount|سعر/i, stock: /stock|qty|quantity|avail|كمية|متوفر|مخزون/i, url: /url|link|رابط/i, brand: /brand|make|vendor|ماركة|علامة/i };
+    function importModal(s) {
+      let table = [];
+      const guess = (hdr) => { const m = {}; Object.keys(COLS_RE).forEach(k => { const i = hdr.findIndex(h => COLS_RE[k].test(h)); if (i >= 0 && !Object.values(m).includes(i)) m[k] = i; }); return m; };
+      modal({
+        title: `${L('Import price list', 'استيراد قائمة أسعار')} · ${esc(s.name)}`, wide: true,
+        body: `<p class="muted" style="margin-top:0">${L('Use the price list file the supplier sends you. From Excel: save as CSV, or copy the cells and paste them below. The first row should have the column names.', 'استخدم ملف قائمة الأسعار من المورد. من Excel: احفظه بصيغة CSV أو انسخ الخلايا والصقها أدناه. الصف الأول يحتوي أسماء الأعمدة.')}</p>
+          <div class="actions"><input type="file" id="im_f" accept=".csv,.tsv,.txt,text/csv,text/plain"></div>
+          <textarea class="input mt" id="im_t" rows="5" placeholder="${L('…or paste here', '…أو الصق هنا')}" dir="ltr"></textarea>
+          <div id="im_map" class="mt"></div>
+          <label class="check mt"><input type="checkbox" id="im_full"> ${L('This is their full list (products not in it are marked as removed)', 'هذه قائمتهم الكاملة (المنتجات غير الموجودة تُعلَّم كمحذوفة)')}</label>`,
+        footer: `<button class="btn" data-close>${t('cancel')}</button><button class="btn primary" id="im_go" disabled>${icon('upload')}${L('Import', 'استيراد')}</button>`,
+        onMount: (el, m) => {
+          const show = () => {
+            const hdr = table[0] || []; const map = guess(hdr);
+            $('#im_map', el).innerHTML = table.length > 1 ? `<div class="form-grid">${Object.keys(COLS_RE).map(k => `<div class="field"><label>${{ sku: L('Code / SKU', 'الرمز'), title: L('Name', 'الاسم'), price: L('Price', 'السعر') + ' (' + esc(s.currency || 'AED') + ')', stock: L('Stock / available', 'المخزون / التوفر'), url: L('Link', 'الرابط'), brand: L('Brand', 'الماركة') }[k]}</label><select class="input sm" data-col="${k}"><option value="">—</option>${hdr.map((h, i) => `<option value="${i}" ${map[k] === i ? 'selected' : ''}>${esc(h || '#' + (i + 1))}</option>`).join('')}</select></div>`).join('')}</div>
+              <p class="faint">${table.length - 1} ${L('rows', 'صف')}. ${L('First rows:', 'أول الصفوف:')}</p><div class="table-wrap"><table class="t"><tbody>${table.slice(0, 4).map(r => `<tr>${r.slice(0, 8).map(c => `<td>${esc(c)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>` : '';
+            $('#im_go', el).disabled = table.length < 2;
+          };
+          const take = (txt) => { table = parseTable(txt || ''); show(); };
+          $('#im_f', el).onchange = (e) => { const f = e.target.files[0]; if (!f) return; if (/\.xlsx?$/i.test(f.name)) return alert(L('Please save the Excel file as CSV first, or copy and paste the cells.', 'احفظ ملف Excel بصيغة CSV أولاً، أو انسخ الخلايا والصقها.')); const r = new FileReader(); r.onload = () => take(r.result); r.readAsText(f); };
+          $('#im_t', el).oninput = (e) => take(e.target.value);
+          $('#im_go', el).onclick = async (e) => {
+            const col = {}; $$('[data-col]', el).forEach(x => { if (x.value !== '') col[x.dataset.col] = +x.value; });
+            if (col.sku == null && col.title == null) return alert(L('Choose the code or name column.', 'اختر عمود الرمز أو الاسم.'));
+            const val = (r, k) => (col[k] == null ? '' : String(r[col[k]] || '').trim());
+            const items = table.slice(1).map(r => { const st = val(r, 'stock'); const n = parseFloat(st.replace(/[^\d.-]/g, '')); return { sku: val(r, 'sku') || val(r, 'title'), title: val(r, 'title') || val(r, 'sku'), price: val(r, 'price') === '' ? null : parseFloat(val(r, 'price').replace(/[^\d.]/g, '')) || null, available: st === '' ? null : Number.isFinite(n) ? n > 0 : /yes|in ?stock|available|متوفر|نعم/i.test(st), url: val(r, 'url'), brand: val(r, 'brand') }; }).filter(x => x.sku);
+            e.currentTarget.disabled = true;
+            try { const r = await Auth.api('POST', `/api/suppliers/${encodeURIComponent(s.id)}/import`, { items, replace: $('#im_full', el).checked }); m.close(); toast(L(`${r.total} products · ${r.added} new · ${r.changed} price changes`, `${r.total} منتج · ${r.added} جديد · ${r.changed} تغيير سعر`)); drop('supstats'); drop('cat'); H.render(); }
+            catch (er) { e.currentTarget.disabled = false; alert(er.message); }
+          };
+        }
+      });
     }
     // ---------- catalog copy status (and auto-refresh while copying) ----------
     let stripTimer = null;
     function syncStrip(auto) {
       const stats = load('supstats', () => Auth.api('GET', '/api/suppliers/stats'), 5000);
       const st = (stats.data && stats.data.stats) || {};
-      const busy = auto.some(s => (st[s.id] || {}).running || !(st[s.id] || {}).items);
+      const busy = auto.some(s => (st[s.id] || {}).running || (s.platform !== 'links' && !(st[s.id] || {}).items && !((st[s.id] || {}).lastRun && (st[s.id] || {}).lastRun.ok === false)));
       if (busy && !stripTimer) stripTimer = setTimeout(() => { stripTimer = null; drop('supstats'); drop('cat:'); if (routeIs('sourcing') && !document.querySelector('.overlay')) H.render(); }, 6000);
       return `<div class="sync-strip">${auto.map(s => {
         const x = st[s.id] || {};
-        const state1 = x.running ? `<span class="typing"><i></i><i></i><i></i></span> ${L('Copying catalog… (1–2 minutes)', 'جارٍ نسخ الكتالوج… (دقيقة أو دقيقتان)')}` : x.lastRun && x.lastRun.ok === false && !x.items ? `<span class="bad-t">${L('Failed', 'فشل')}: ${esc(x.lastRun.error || '')}</span>` : x.items ? `${fmt(x.items, 0)} ${L('products', 'منتج')} · ${L('updated', 'تحديث')} ${ago((x.lastRun && (x.lastRun.done || x.lastRun.at)) || x.lastSeen)}` : L('Waiting to copy…', 'بانتظار النسخ…');
+        const state1 = s.platform === 'links' && !x.running ? `${fmt(x.items || 0, 0)} ${L('linked products, checked daily', 'منتج مرتبط، تُفحص يومياً')}` : x.running ? `<span class="typing"><i></i><i></i><i></i></span> ${L('Copying catalog… (1–2 minutes)', 'جارٍ نسخ الكتالوج… (دقيقة أو دقيقتان)')}` : x.lastRun && x.lastRun.ok === false && !x.items ? `<span class="bad-t">${L('Failed', 'فشل')}: ${esc(x.lastRun.error || '')}</span>` : x.items ? `${fmt(x.items, 0)} ${L('products', 'منتج')} · ${L('updated', 'تحديث')} ${ago((x.lastRun && (x.lastRun.done || x.lastRun.at)) || x.lastSeen)}` : L('Waiting to copy…', 'بانتظار النسخ…');
         return `<div class="ss-item"><b>${esc(s.name)}</b><span>${state1}</span>${can('suppliers', 'edit') && !x.running ? `<button class="btn sm ghost" data-sync="${esc(s.id)}" title="${L('Sync now', 'زامن الآن')}">${icon('refresh')}</button>` : ''}</div>`;
       }).join('')}</div>`;
     }
@@ -588,7 +682,7 @@
             <div class="form-grid">
               <div class="field"><label>${t('supplier')}</label><select class="input" id="sm_sup" ${manual ? '' : 'disabled'}>${sources.map(s => `<option value="${s.id}" ${s.id === item.supplierId ? 'selected' : ''}>${esc(s.name)}</option>`).join('')}</select></div>
               <div class="field"><label>${L('Supplier code / SKU', 'رمز المورد')}</label><input class="input" id="sm_sku" dir="ltr" value="${esc(item.sku || '')}" ${manual ? '' : 'readonly'}></div>
-              <div class="field full"><label>${L('Product link on supplier website', 'رابط المنتج في موقع المورد')}</label><input class="input" id="sm_url" dir="ltr" placeholder="https://" value="${esc(item.url || '')}" ${manual ? '' : 'readonly'}></div>
+              <div class="field full"><label>${L('Product link on supplier website', 'رابط المنتج في موقع المورد')}</label><div class="actions" style="flex-wrap:nowrap"><input class="input" id="sm_url" dir="ltr" placeholder="https://" value="${esc(item.url || '')}" ${manual ? '' : 'readonly'} style="flex:1">${manual && online() ? `<button type="button" class="btn" id="sm_read">${icon('search')}${L('Read page', 'قراءة الصفحة')}</button>` : ''}</div><p class="faint" id="sm_readn" style="font-size:12px;margin:4px 0 0">${manual && online() ? L('Paste the link and press "Read page": name, code, price and stock are filled in when the site allows it.', 'الصق الرابط واضغط "قراءة الصفحة": يُملأ الاسم والرمز والسعر والتوفر إن سمح الموقع.') : ''}</p></div>
               ${costs ? `<div class="field"><label>${L('Supplier price', 'سعر المورد')} (<span id="sm_cur">${esc(sup(DB.supplier(item.supplierId)).currency)}</span>)</label><input class="input num" id="sm_sp" type="number" step="0.01" min="0" value="${item.price != null ? item.price : ''}"></div>
               <div class="field"><label>${L('Landed cost (OMR)', 'التكلفة الواصلة (ر.ع)')}</label><div class="input calc" id="sm_lc">—</div></div>
               <p class="faint full" id="sm_how" style="font-size:12px;margin:0"></p>` : ''}
@@ -607,6 +701,7 @@
               ${costs ? `<div class="field"><label>${L('Margin on cost (%)', 'الهامش على التكلفة (%)')}</label><input class="input num" id="sm_mk" type="number" step="1" min="0"></div>` : ''}
               <div class="field"><label>${L('Selling price (OMR, before VAT)', 'سعر البيع (ر.ع قبل الضريبة)')}</label><input class="input num" id="sm_pr" type="number" step="0.001" min="0" value="${p ? p.price : ''}"></div>
               ${costs ? `<p class="full" id="sm_profit" style="margin:0;font-size:13px"></p>` : ''}
+              <div class="field full"><label>${L('If the supplier runs out (and the shop has none)', 'إذا نفد لدى المورد (ولا يوجد في المحل)')}</label><select class="input" id="sm_out">${OUT_MODES().map(([k, l]) => `<option value="${k}" ${((p && p.outMode) || 'default') === k ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
               <div class="field full newf"><label class="check"><input type="checkbox" id="sm_show" ${p ? (p.showPrice ? 'checked' : '') : 'checked'}> ${t('show_price')}</label></div>
               ${p ? `<div class="field full"><label class="check"><input type="checkbox" id="sm_pref" ${(DB.preferredSource(p) || {}).supplierId === item.supplierId ? 'checked' : ''}> ${L('Buy from this supplier by default', 'الشراء من هذا المورد افتراضياً')}</label></div>` : ''}
             </div>
@@ -636,6 +731,22 @@
             $('#sm_sup', el).onchange = () => upd('mk');
           }
           $$('#sm_mode button', el).forEach(b => b.onclick = () => { mode = b.dataset.k; $$('#sm_mode button', el).forEach(x => x.classList.toggle('on', x === b)); $$('.newf', el).forEach(x => x.classList.toggle('hide', mode === 'link')); $('#sm_linkf', el).classList.toggle('hide', mode !== 'link'); });
+          if ($('#sm_read', el)) $('#sm_read', el).onclick = async (e) => {
+            const url = $('#sm_url', el).value.trim(); if (!url) return $('#sm_url', el).focus();
+            const b = e.currentTarget; b.disabled = true; $('#sm_readn', el).textContent = '…';
+            try {
+              const r = await Auth.api('POST', '/api/suppliers/read-link', { url });
+              if (r.supplierId && $(`#sm_sup option[value="${r.supplierId}"]`, el)) $('#sm_sup', el).value = r.supplierId;
+              if (r.sku) $('#sm_sku', el).value = r.sku;
+              if (r.title && $('#sm_name', el) && !$('#sm_name', el).value) $('#sm_name', el).value = r.title;
+              if (r.vendor && $('#sm_brand', el) && !$('#sm_brand', el).value) $('#sm_brand', el).value = r.vendor;
+              if (r.sku && $('#sm_pn', el) && !$('#sm_pn', el).value) $('#sm_pn', el).value = r.sku;
+              if (r.price != null && $('#sm_sp', el)) { $('#sm_sp', el).value = r.price; $('#sm_sp', el).dispatchEvent(new Event('input')); }
+              item.title = r.title || item.title; item.available = r.available; item.vendor = r.vendor;
+              $('#sm_readn', el).innerHTML = `${icon('check')} ${esc(r.title || '')}${r.price != null ? ' · ' + esc((r.currency || '') + ' ' + fmt(r.price, 2)) : ''}${r.available === false ? ' · <b class="bad-t">' + L('out of stock', 'غير متوفر') + '</b>' : r.available ? ' · ' + L('in stock', 'متوفر') : ''}`;
+            } catch (er) { $('#sm_readn', el).textContent = er.message; }
+            b.disabled = false;
+          };
           if ($('#sm_unlink', el)) $('#sm_unlink', el).onclick = () => { p.sources = p.sources.filter(x => x.supplierId !== item.supplierId); DB.save(); m.close(); toast(t('saved')); H.render(); };
           $('#sm_save', el).onclick = () => {
             const sid = $('#sm_sup', el).value, s = sup(DB.supplier(sid));
@@ -658,11 +769,12 @@
               if (cost != null && pref) target.cost = cost;
               if (isFinite(mk)) target.marginPct = mk;
               if ($('#sm_show', el)) target.showPrice = $('#sm_show', el).checked;
+              target.outMode = $('#sm_out', el).value;
             } else {
               const name = $('#sm_name', el).value.trim(); if (!name) return $('#sm_name', el).focus();
               if (!price) return alert(L('Enter the selling price.', 'أدخل سعر البيع.'));
               const pn = $('#sm_pn', el).value.trim();
-              target = { id: DB.uid('p'), name, nameAr: '', partNumber: pn, sku: pn || 'SKU-' + Date.now().toString(36).toUpperCase(), slug: name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60) + '-' + Date.now().toString(36).slice(-4), brand: $('#sm_brand', el).value.trim(), category: $('#sm_cat', el).value, cost: cost || 0, price, stock: 0, reorder: 0, location: '', fitment: '', vehicles: [], active: true, online: true, showPrice: $('#sm_show', el).checked, image: '', oldPrice: 0, description: '', descriptionAr: '', featured: false, sources: [Object.assign(src, { preferred: true })], marginPct: isFinite(mk) ? mk : null, priceMode: 'margin', created: Date.now() };
+              target = { id: DB.uid('p'), name, nameAr: '', partNumber: pn, sku: pn || 'SKU-' + Date.now().toString(36).toUpperCase(), slug: name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60) + '-' + Date.now().toString(36).slice(-4), brand: $('#sm_brand', el).value.trim(), category: $('#sm_cat', el).value, cost: cost || 0, price, stock: 0, reorder: 0, location: '', fitment: '', vehicles: [], active: true, online: true, showPrice: $('#sm_show', el).checked, image: '', oldPrice: 0, description: '', descriptionAr: '', featured: false, sources: [Object.assign(src, { preferred: true })], marginPct: isFinite(mk) ? mk : null, priceMode: 'margin', outMode: $('#sm_out', el).value, supplierOut: item.available === false, created: Date.now() };
               D().products.push(target);
             }
             DB.save(); m.close(); toast(t('saved')); drop('mine-lookup'); drop('lookup:'); H.render();
@@ -676,7 +788,7 @@
     // TEAM (online only)
     // =====================================================
     const MODS = [
-      ['dashboard', 'dashboard', L('Home screen and to-do list', 'الشاشة الرئيسية وقائمة المهام')],
+      ['dashboard', 'dashboard', L('Shop overview: overall sales and profit (the owner\'s dashboard). Everyone else gets "My work".', 'نظرة المتجر: إجمالي المبيعات والأرباح (لوحة المالك). البقية يرون "عملي".')],
       ['pos', 'pos', L('Sell in the shop (till)', 'البيع في المحل (نقطة البيع)')],
       ['orders', 'orders', L('Online orders: confirm, ship, deliver, cancel', 'الطلبات الإلكترونية: تأكيد، شحن، تسليم، إلغاء')],
       ['quotes', 'file', L('Price quotes for customers', 'عروض الأسعار للعملاء')],
@@ -689,9 +801,9 @@
       ['finance', 'finance', L('Expenses, profit and money', 'المصروفات والأرباح والأموال')],
       ['reports', 'reports', L('Sales reports', 'تقارير المبيعات')],
       ['whatsapp', 'whatsapp', L('WhatsApp messages and campaigns', 'رسائل وحملات واتساب')],
-      ['ai', 'sparkle', L('AI advisor and AI writing', 'مستشار الذكاء الاصطناعي والكتابة')],
+      ['ai', 'sparkle', L('AI assistant (only answers about what this person may see)', 'المساعد الذكي (يجيب فقط عما يسمح لهذا الشخص برؤيته)')],
       ['settings', 'settings', L('Shop settings and website publishing', 'إعدادات المتجر ونشر الموقع')],
-      ['team', 'users', L('See team performance and activity', 'رؤية أداء الفريق ونشاطه')]
+      ['team', 'users', L('Team: View = see performance and activity; Edit = also give tasks to others', 'الفريق: عرض = رؤية الأداء والنشاط؛ تعديل = أيضاً إسناد المهام للآخرين')]
     ];
     const LV = [['none', L('No access', 'بدون')], ['view', L('View', 'عرض')], ['request', L('Ask approval', 'بموافقة')], ['edit', L('Edit', 'تعديل')], ['full', L('Full', 'كامل')]];
     const LV_HELP = L('View: can look only · Ask approval: changes wait for you to approve · Edit: changes directly, but deleting, cancelling and refunds wait for you · Full: everything, including deleting.', 'عرض: مشاهدة فقط · بموافقة: التغييرات تنتظر موافقتك · تعديل: يغيّر مباشرة لكن الحذف والإلغاء والاسترجاع ينتظر موافقتك · كامل: كل شيء بما في ذلك الحذف.');
@@ -706,11 +818,12 @@
       if (!online()) { v.innerHTML = `<div class="page-head"><div><h2>${t('team')}</h2></div></div><div class="notice">${icon('users')}<div>${L('Employee accounts need the online server. Ask your developer to deploy it and set its address in assets/js/config.js.', 'حسابات الموظفين تحتاج الخادم. اطلب من المطوّر تشغيله ووضع عنوانه في assets/js/config.js.')}</div></div>`; return; }
       const tab = state.teamTab || 'members';
       v.innerHTML = `<div class="page-head"><div><h2>${t('team')}</h2><p>${L('Accounts, permissions, performance and who did what.', 'الحسابات والصلاحيات والأداء ومن فعل ماذا.')}</p></div><div class="actions">${isOwner() ? `<button class="btn primary" id="tmAdd">${icon('plus')}${L('Add employee', 'إضافة موظف')}</button>` : ''}</div></div>
-        <div class="tabs" role="tablist">${[['members', L('Members', 'الأعضاء')], ['perf', L('Performance', 'الأداء')], ['activity', L('Activity', 'النشاط')]].map(([k, l]) => `<button role="tab" data-tab="${k}" class="${tab === k ? 'on' : ''}">${l}</button>`).join('')}</div><div id="tmBody" class="mt"></div>`;
+        <div class="tabs" role="tablist">${[['members', L('Members', 'الأعضاء')], ['tasks', L('Tasks', 'المهام')], ['perf', L('Performance', 'الأداء')], ['activity', L('Activity', 'النشاط')]].map(([k, l]) => `<button role="tab" data-tab="${k}" class="${tab === k ? 'on' : ''}">${l}</button>`).join('')}</div><div id="tmBody" class="mt"></div>`;
       $$('[data-tab]', v).forEach(b => b.onclick = () => { state.teamTab = b.dataset.tab; H.render(); });
       const status = load('status', () => Auth.api('GET', '/api/status'), 600000);
-      if ($('#tmAdd')) $('#tmAdd').onclick = () => userModal(null, (status.data || {}).presets);
+      if ($('#tmAdd')) $('#tmAdd').onclick = async () => { let pr = (status.data || {}).presets; if (!pr) { try { pr = (await Auth.api('GET', '/api/status')).presets; } catch (e) { pr = {}; } } userModal(null, pr); };
       const body = $('#tmBody');
+      if (tab === 'tasks' && H.renderTeamTasks) return H.renderTeamTasks(body);
       if (tab === 'members') {
         const res = load('users', () => Auth.api('GET', '/api/users'));
         if (res.err) { body.innerHTML = errBox(res.err); return; }
@@ -768,7 +881,7 @@
           <h4 class="sub-h mt">${icon('shield')} ${L('Permissions', 'الصلاحيات')}</h4>
           <div class="actions" style="flex-wrap:wrap">${Object.keys(presets || {}).map(k => `<button type="button" class="chip" data-preset="${k}">${esc(PRESET_NAMES[k] || k)}</button>`).join('')}<button type="button" class="chip" data-preset="none">${L('Clear all', 'مسح الكل')}</button></div>
           <div class="table-wrap mt"><table class="t perm-t"><thead><tr><th>${L('Section', 'القسم')}</th>${LV.map(([k, l]) => `<th class="c">${l}</th>`).join('')}</tr></thead><tbody>
-            ${MODS.map(([m, ic, desc]) => `<tr><td><div class="who">${icon(ic)}<div><b>${esc(modLabel(m))}</b><div class="faint">${esc(desc)}</div></div></div></td>${LV.map(([k, l]) => `<td class="c" data-label="${esc(l)}"><input type="radio" name="pm_${m}" value="${k}" ${(perms[m] || 'none') === k ? 'checked' : ''} aria-label="${esc(modLabel(m) + ': ' + l)}" ${m === 'team' && ['request', 'edit', 'full'].includes(k) ? 'disabled' : ''}></td>`).join('')}</tr>`).join('')}
+            ${MODS.map(([m, ic, desc]) => `<tr><td><div class="who">${icon(ic)}<div><b>${esc(modLabel(m))}</b><div class="faint">${esc(desc)}</div></div></div></td>${LV.map(([k, l]) => `<td class="c" data-label="${esc(l)}"><input type="radio" name="pm_${m}" value="${k}" ${(perms[m] || 'none') === k ? 'checked' : ''} aria-label="${esc(modLabel(m) + ': ' + l)}" ${m === 'team' && ['request', 'full'].includes(k) ? 'disabled' : ''}></td>`).join('')}</tr>`).join('')}
           </tbody></table></div>
           <p class="faint" style="font-size:12.5px">${LV_HELP} ${L('Only you (the owner) can add or change accounts.', 'أنت فقط (المالك) من يضيف الحسابات أو يغيّرها.')}</p>
           <div class="form-grid mt">
@@ -837,13 +950,13 @@
     const at = (id) => ROUTES.findIndex(r => r.id === id);
     ROUTES.splice(at('purchases') + 1, 0,
       { id: 'suppliers', icon: 'factory', grp: 'grp_stock', badge: () => (can('suppliers') || can('purchases') ? buyLines().length : 0), tone: 'warn' },
-      { id: 'sourcing', icon: 'link', grp: 'grp_stock', badge: () => alerts.n, tone: 'warn' });
+      { id: 'sourcing', icon: 'link', grp: 'grp_stock', badge: () => alerts.n || (online() ? Auth.inbox().supplierChanges || 0 : 0), tone: 'warn' });
     if (online()) ROUTES.splice(at('settings'), 0,
       { id: 'team', icon: 'users', grp: 'grp_set' },
       { id: 'approvals', icon: 'inbox', grp: 'grp_set', badge: () => Auth.inbox().pending, tone: 'warn' });
 
     if (online()) {
-      const NEED = { dashboard: ['dashboard'], pos: ['pos'], orders: ['orders'], quotes: ['quotes'], customers: ['customers'], inventory: ['inventory', 'pricing'], purchases: ['purchases'], suppliers: ['suppliers', 'purchases'], sourcing: ['pricing', 'suppliers', 'purchases'], qpay: ['qpay'], finance: ['finance'], reports: ['reports'], whatsapp: ['whatsapp'], advisor: ['ai'], team: ['team'] };
+      const NEED = { pos: ['pos'], orders: ['orders'], quotes: ['quotes'], customers: ['customers'], inventory: ['inventory', 'pricing'], purchases: ['purchases'], suppliers: ['suppliers', 'purchases'], sourcing: ['pricing', 'suppliers', 'purchases'], qpay: ['qpay'], finance: ['finance'], reports: ['reports'], whatsapp: ['whatsapp'], advisor: ['ai'], team: ['team'] };
       const LVL = ['none', 'view', 'request', 'edit', 'full'];
       const best = (id) => (NEED[id] || []).reduce((a, m) => Math.max(a, LVL.indexOf(Auth.level(m))), -1);
       for (let i = ROUTES.length - 1; i >= 0; i--) { const id = ROUTES[i].id; if (NEED[id] && best(id) < 1) ROUTES.splice(i, 1); }

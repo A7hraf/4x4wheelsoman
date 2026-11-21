@@ -13,10 +13,10 @@ const rank = (l) => Math.max(0, LEVELS.indexOf(l));
 
 // Ready-made roles the owner can start from and then adjust.
 export const PRESETS = {
-  cashier: { dashboard: 'view', pos: 'edit', orders: 'view', quotes: 'view', customers: 'edit', inventory: 'view', qpay: 'view', costs: false, export: false, maxDiscount: 5 },
-  sales: { dashboard: 'view', pos: 'edit', orders: 'edit', quotes: 'edit', customers: 'edit', inventory: 'view', qpay: 'edit', whatsapp: 'request', ai: 'view', costs: false, export: false, maxDiscount: 10 },
-  storekeeper: { dashboard: 'view', orders: 'view', inventory: 'edit', suppliers: 'edit', purchases: 'edit', pricing: 'request', costs: true, export: false, maxDiscount: 0 },
-  manager: { dashboard: 'view', pos: 'full', orders: 'full', quotes: 'full', customers: 'full', inventory: 'full', pricing: 'edit', suppliers: 'full', purchases: 'full', qpay: 'full', finance: 'view', reports: 'view', whatsapp: 'edit', ai: 'view', settings: 'view', team: 'view', costs: true, export: true, maxDiscount: 20 }
+  cashier: { pos: 'edit', orders: 'view', quotes: 'view', customers: 'edit', inventory: 'view', qpay: 'view', ai: 'view', costs: false, export: false, maxDiscount: 5 },
+  sales: { pos: 'edit', orders: 'edit', quotes: 'edit', customers: 'edit', inventory: 'view', qpay: 'edit', whatsapp: 'request', ai: 'view', costs: false, export: false, maxDiscount: 10 },
+  storekeeper: { orders: 'view', inventory: 'edit', suppliers: 'edit', purchases: 'edit', pricing: 'request', ai: 'view', costs: true, export: false, maxDiscount: 0 },
+  manager: { pos: 'full', orders: 'full', quotes: 'full', customers: 'full', inventory: 'full', pricing: 'edit', suppliers: 'full', purchases: 'full', qpay: 'full', finance: 'view', reports: 'view', whatsapp: 'edit', ai: 'view', settings: 'view', team: 'edit', costs: true, export: true, maxDiscount: 20 }
 };
 
 export function normalizePerms(p) {
@@ -42,9 +42,16 @@ const READ = {
   expenses: ['finance', 'reports'],
   moves: ['inventory', 'purchases'],
   campaigns: ['whatsapp'], waLog: ['whatsapp'],
+  tasks: ['team'],
   held: ['pos']
 };
+// Row-level: everyone sees the tasks given to them or created by them.
+export function canReadRow(u, col, row) {
+  if (col !== 'tasks' || !row || isOwner(u) || atLeast(u, 'team', 'view')) return true;
+  return row.assignedTo === u.id || row.createdBy === u.id;
+}
 export function canRead(u, col, id) {
+  if (col === 'tasks') return true; // filtered per row (canReadRow)
   if (isOwner(u)) return true;
   if (col === 'meta') return true; // settings, makes, brands (secrets are never stored here)
   const mods = READ[col] || ['settings'];
@@ -101,6 +108,7 @@ export function classify(col, id, before, after) {
     case 'campaigns': return r(['whatsapp']);
     case 'categories': case 'vehicles': return r(['inventory']);
     case 'meta': return id === 'settings' || id === 'demo' ? r(['settings']) : r(['inventory']);
+    case 'tasks': return r(['team']);
     default: return r(['settings']);
   }
 }
@@ -108,6 +116,7 @@ export function classify(col, id, before, after) {
 // allow | approve | deny for one change
 export function verdict(u, c) {
   if (isOwner(u)) return 'allow';
+  if (c.self) return 'allow';
   const best = Math.max(...c.anyOf.map(m => rank(level(u, m))));
   if (c.also && !c.also.some(m => atLeast(u, m, 'edit'))) {
     if (!c.also.some(m => atLeast(u, m, 'request'))) return 'deny';
